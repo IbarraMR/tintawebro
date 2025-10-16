@@ -1,54 +1,61 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Insumos - Tinta Negra</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-light">
-    <nav class="navbar navbar-dark bg-dark mb-4">
-        <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1">Tinta Negra - Insumos</span>
-            <a href="{% url 'home' %}" class="btn btn-outline-light btn-sm">Inicio</a>
-        </div>
-    </nav>
+{% extends 'core/base.html' %}
+{% load static %}
 
-    <div class="container mt-4">
-        <h2 class="mb-4 text-center text-dark">Listado de Insumos</h2>
-        <div class="table-responsive shadow-sm">
-            <table class="table table-striped table-bordered align-middle">
-                <thead class="table-dark text-center">
+{% block title %}Stock de Insumos{% endblock %}
+
+{% block content %}
+    
+    <h2 class="mb-4 text-white">Stock de Insumos</h2>
+
+    <div class="d-flex justify-content-between mb-4 align-items-center">
+        <div class="input-group search-input-group" style="max-width: 400px;">
+            <input type="text" class="form-control" placeholder="Buscar insumo...">
+            <button class="btn btn-custom" type="button">
+                <i class="fas fa-search"></i>
+            </button>
+        </div>
+        <button class="btn btn-custom">
+            <i class="fas fa-plus me-1"></i> Nuevo Insumo
+        </button>
+    </div>
+    
+    <div class="card p-4" style="background-color: #1f1f1f; border: 1px solid #333333;">
+
+        <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle mb-0">
+                <thead>
                     <tr>
-                        <th>ID</th>
-                        <th>Nombre</th>
-                        <th>Descripción</th>
-                        <th>Unidad de Medida</th>
-                        <th>Stock Actual</th>
-                        <th>Stock Mínimo</th>
-                        <th>Precio Costo Unitario</th>
-                    </tr>
+                        <th style="width: 8%;">ID</th>
+                        <th style="width: 20%;">Nombre</th>
+                        <th style="width: 25%;">Descripción</th>
+                        <th style="width: 12%;">Medida</th>
+                        <th style="width: 10%;">Stock Actual</th>
+                        <th style="width: 10%;">Stock Mínimo</th>
+                        <th style="width: 10%;">Costo Unitario</th>
+                        <th style="width: 5%;">Acciones</th> </tr>
                 </thead>
                 <tbody>
                     {% for insumo in insumos %}
                     <tr>
-                        <td>{{ insumo.id_insumo }}</td>
+                        <td>#{{ insumo.id_insumo }}</td>
                         <td>{{ insumo.nombre }}</td>
                         <td>{{ insumo.descripcion }}</td>
                         <td>{{ insumo.unidad_medida }}</td>
                         <td>{{ insumo.stock_actual }}</td>
                         <td>{{ insumo.stock_minimo }}</td>
                         <td>${{ insumo.precio_costo_unitario }}</td>
+                        <td>
+                            <a href="#" class="text-secondary" title="Modificar"><i class="fas fa-pencil-alt"></i></a>
+                        </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="7" class="text-center text-muted">No hay insumos cargados.</td>
+                        <td colspan="8" class="text-center text-secondary">No hay insumos cargados.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+        
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+{% endblock %}

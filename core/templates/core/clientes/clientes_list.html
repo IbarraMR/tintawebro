@@ -1,0 +1,99 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Clientes | Listado{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="text-white">Listado de Clientes</h2>
+    
+    {% if perms.core.add_clientes %}
+    <a href="{% url 'cliente_create' %}" class="btn btn-success">
+        <i class="fas fa-user-plus me-2"></i> Registrar Nuevo Cliente
+    </a>
+    {% endif %}
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<div class="card p-4" style="background-color: #1f1f1f; border: 1px solid #333333;">
+    {% if clientes %}
+    <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+            <thead>
+                <tr>
+                    <th scope="col">ID</th>
+                    <th scope="col">Nombre</th>
+                    <th scope="col">DNI</th>
+                    <th scope="col">Teléfono</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Dirección</th>
+                    <th scope="col" class="text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cliente in clientes %}
+                <tr>
+                    <th scope="row">{{ cliente.id_cliente }}</th>
+                    <td>{{ cliente.nombre }} {{ cliente.apellido|default_if_none:"" }}</td>
+                    <td>{{ cliente.dni|default_if_none:"N/A" }}</td>
+                    <td>{{ cliente.telefono|default_if_none:"N/A" }}</td>
+                    <td>{{ cliente.email|default_if_none:"N/A" }}</td>
+                    <td>{{ cliente.direccion|default_if_none:"N/A" }}</td>
+                    <td class="text-center">
+                        
+                        {% if perms.core.change_clientes %}
+                        <a href="{% url 'cliente_edit' pk=cliente.id_cliente %}" class="btn btn-sm btn-info me-2" title="Editar">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        {% endif %}
+                        
+                        {% if perms.core.delete_clientes %}
+                        <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal-{{ cliente.id_cliente }}" title="Eliminar">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info text-center">
+        No se encontraron clientes registrados.
+    </div>
+    {% endif %}
+</div>
+
+{% for cliente in clientes %}
+<div class="modal fade" id="deleteModal-{{ cliente.id_cliente }}" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background-color: #1f1f1f; border: 1px solid #333333;">
+            <div class="modal-header border-bottom-0">
+                <h5 class="modal-title text-white" id="deleteModalLabel">Confirmar Eliminación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-secondary">
+                ¿Estás seguro de que quieres eliminar al cliente <strong>{{ cliente.nombre }} {{ cliente.apellido }}</strong>? Esta acción no se puede deshacer.
+            </div>
+            <div class="modal-footer border-top-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                
+                <form action="{% url 'cliente_delete' pk=cliente.id_cliente %}" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">Eliminar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}

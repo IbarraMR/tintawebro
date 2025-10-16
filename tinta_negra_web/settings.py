@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',
     'core',
 ]
 
@@ -131,3 +132,22 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Redirección después de login/logout
 LOGIN_REDIRECT_URL = '/home/'  
 LOGOUT_REDIRECT_URL = '/login/'
+LOGIN_URL = '/login/'
+
+# settings.py
+
+# ... (otras configuraciones)
+
+# Configuración de Archivos Estáticos (Static files)
+import os
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# URL que Django usará para servir los archivos estáticos (Ej: /static/styles.css)
+STATIC_URL = '/static/'
+
+# Directorio donde `collectstatic` copiará todos los archivos estáticos. 
+# Esto es CRÍTICO para el comando que falló.
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+CACHE_MIDDLEWARE_SECONDS = 0
+CACHE_MIDDLEWARE_KEY_PREFIX = ""
+CACHE_MIDDLEWARE_ALIAS = "default"

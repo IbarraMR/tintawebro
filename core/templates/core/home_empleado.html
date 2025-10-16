@@ -1,0 +1,63 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Mi Dashboard - Empleado{% endblock %}
+
+{% block content %}
+    
+    <h2 class="mb-4 text-white">Bienvenido, {{ request.user.username|title }}</h2>
+    <p class="text-secondary mb-5">Aquí encontrarás un resumen de tus tareas y el estado del stock.</p>
+
+    <div class="row g-4">
+        
+        <div class="col-xl-3 col-md-6">
+            <div class="dashboard-card border-warning">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-clipboard-list fa-3x text-warning me-3"></i>
+                    <div>
+                        <div class="text-uppercase text-secondary small">Mis Pedidos Pendientes</div>
+                        <h3 class="mb-0 text-white">{{ pedidos_pendientes_count }}</h3> 
+                    </div>
+                </div>
+                <a href="{% url 'pedidos_list' %}" class="stretched-link small text-secondary mt-2 d-block">Ver mis tareas</a>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="dashboard-card border-danger">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-triangle-exclamation fa-3x text-danger me-3"></i>
+                    <div>
+                        <div class="text-uppercase text-secondary small">Insumos Críticos</div>
+                        <h3 class="mb-0 text-white">{{ insumos_criticos_count }}</h3> 
+                    </div>
+                </div>
+                <a href="{% url 'insumos_list' %}" class="stretched-link small text-secondary mt-2 d-block">Revisar stock</a>
+            </div>
+        </div>
+        
+        </div> <div class="row mt-5">
+        <div class="col-lg-12">
+            <div class="p-4" style="background-color: #1f1f1f; border-radius: 8px; border: 1px solid #333333;">
+                <h5 class="text-white mb-3">Accesos Rápidos</h5>
+                <p class="text-secondary">Utiliza estos botones para ir a tus tareas más frecuentes.</p>
+                <div class="d-flex gap-3 mt-4">
+                    <a href="{% url 'pedidos_list' %}" class="btn btn-lg btn-warning">
+                        <i class="fas fa-list-check me-2"></i> Gestionar Pedidos
+                    </a>
+                    {% if perms.core.add_insumos %}
+                    <a href="#" class="btn btn-lg btn-success">
+                        <i class="fas fa-plus me-2"></i> Añadir Stock
+                    </a>
+                    {% endif %}
+                    {% if perms.core.add_presupuestos %}
+                    <a href="#" class="btn btn-lg btn-info">
+                        <i class="fas fa-file-invoice-dollar me-2"></i> Crear Presupuesto
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% endblock %}
