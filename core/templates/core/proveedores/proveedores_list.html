@@ -1,121 +1,103 @@
-{% extends "core/base.html" %}
+{% extends 'core/base.html' %}
 {% load static %}
 
-{% block title %}Proveedores{% endblock %}
+{% block title %}Proveedores | Listado{% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="text-white">Gestión de Proveedores</h2>
-        <a href="{% url 'proveedor_form' %}" class="btn btn-success">
-            <i class="fas fa-plus me-2"></i> Nuevo Proveedor
-        </a>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="text-white">Listado de Proveedores</h2>
+    
+    {% if perms.core.add_proveedores %}
+    <a href="{% url 'proveedor_create' %}" class="btn btn-success">
+        <i class="fas fa-plus me-2"></i> Registrar Nuevo Proveedor
+    </a>
+    {% endif %}
+</div>
 
-    <div class="row mb-3">
-        <div class="col-md-4">
-            <div class="input-group">
-                <input type="text" id="searchInput" class="form-control" placeholder="Buscar por Razón Social o CUIT..." onkeyup="filterTable()">
-                <button class="btn btn-outline-secondary" type="button"><i class="fas fa-search"></i></button>
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<div class="card p-4" style="background-color: #1f1f1f; border: 1px solid #333333;">
+    {% if proveedores %}
+    <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+            <thead>
+                <tr>
+                    <th scope="col">ID</th>
+                    <th scope="col">Nombre</th>
+                    <th scope="col">CUIT</th>
+                    <th scope="col">Razón Social</th>
+                    <th scope="col">Teléfono</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Dirección</th>
+                    <th scope="col">Contacto</th>
+                    <th scope="col" class="text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for proveedor in proveedores %}
+                <tr>
+                    <th scope="row">{{ proveedor.id_proveedor }}</th>
+                    <td>{{ proveedor.nombre|default_if_none:"N/A" }}</td>
+                    <td>{{ proveedor.cuit|default_if_none:"N/A" }}</td>
+                    <td>{{ proveedor.razon_social|default_if_none:"N/A" }}</td>
+                    <td>{{ proveedor.telefono|default_if_none:"N/A" }}</td>
+                    <td>{{ proveedor.email|default_if_none:"N/A" }}</td>
+                    <td>{{ proveedor.direccion|default_if_none:"N/A" }}</td>
+                    <td>{{ proveedor.persona_contacto|default_if_none:"N/A" }}</td>
+                    <td class="text-center">
+                        {% if perms.core.change_proveedores %}
+                        <a href="{% url 'proveedor_edit' pk=proveedor.id_proveedor %}" class="btn btn-sm btn-info me-2" title="Editar">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        {% endif %}
+                        
+                        {% if perms.core.change_proveedores %}
+                        <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal-{{ proveedor.id_proveedor }}" title="Dar de baja">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info text-center">
+        No se encontraron proveedores registrados.
+    </div>
+    {% endif %}
+</div>
+
+{% for proveedor in proveedores %}
+<div class="modal fade" id="deleteModal-{{ proveedor.id_proveedor }}" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background-color: #1f1f1f; border: 1px solid #333333;">
+            <div class="modal-header border-bottom-0">
+                <h5 class="modal-title text-white" id="deleteModalLabel">Confirmar Baja</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-        </div>
-        <div class="col-md-3">
-            <select id="estadoFilter" class="form-select" onchange="filterTable()">
-                <option value="">Todos los Estados</option>
-                <option value="Activo">Activo</option>
-                <option value="Inactivo">Inactivo</option>
-            </select>
-        </div>
-    </div>
-
-    <div class="card bg-dark border-secondary">
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-dark table-striped table-hover" id="proveedoresTable">
-                    <thead>
-                        <tr>
-                            <th>CUIT</th>
-                            <th>Razón Social</th>
-                            <th>Teléfono</th>
-                            <th>Email</th>
-                            <th>Estado</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for proveedor in object_list %}
-                        <tr>
-                            <td>{{ proveedor.cuit }}</td>
-                            <td>{{ proveedor.razon_social }}</td>
-                            <td>{{ proveedor.telefono }}</td>
-                            <td>{{ proveedor.email }}</td>
-                            <td class="estado-cell">
-                                {% if proveedor.is_active %}
-                                    <span class="badge bg-success">Activo</span>
-                                {% else %}
-                                    <span class="badge bg-danger">Inactivo</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <a href="{% url 'proveedor_form' proveedor.pk %}" class="btn btn-sm btn-info me-1" title="Editar">
-                                    <i class="fas fa-pencil-alt"></i>
-                                </a>
-                                {% if proveedor.is_active %}
-                                    <a href="{% url 'proveedor_baja_logica' proveedor.pk %}" class="btn btn-sm btn-danger" title="Dar de Baja" onclick="return confirm('¿Está seguro de dar de baja a {{ proveedor.razon_social }}? Esto lo marcará como inactivo.')">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </a>
-                                {% else %}
-                                    <a href="{% url 'proveedor_reactivar' proveedor.pk %}" class="btn btn-sm btn-warning" title="Reactivar" onclick="return confirm('¿Está seguro de reactivar a {{ proveedor.razon_social }}?')">
-                                        <i class="fas fa-sync-alt"></i>
-                                    </a>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="6" class="text-center text-muted">No se encontraron proveedores.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="modal-body text-secondary">
+                ¿Estás seguro de que quieres dar de baja al proveedor <strong>{{ proveedor.nombre }}</strong>? Esta acción se puede revertir desde la reactivación.
+            </div>
+            <div class="modal-footer border-top-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                
+                <form action="{% url 'proveedor_baja' pk=proveedor.id_proveedor %}" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">Dar de baja</button>
+                </form>
             </div>
         </div>
     </div>
 </div>
-
-<script>
-function filterTable() {
-    var input, filter, table, tr, td_cuit, td_razon, td_estado, i, textValue_cuit, textValue_razon, estadoFilter;
-    
-    // Obtener valores de búsqueda y filtro
-    input = document.getElementById("searchInput");
-    filter = input.value.toUpperCase();
-    estadoFilter = document.getElementById("estadoFilter").value.toUpperCase();
-    table = document.getElementById("proveedoresTable");
-    tr = table.getElementsByTagName("tr");
-
-    for (i = 1; i < tr.length; i++) {
-        tr[i].style.display = "none";
-        
-        // Celdas a buscar (CUIT y Razón Social)
-        td_cuit = tr[i].getElementsByTagName("td")[0]; // Columna CUIT
-        td_razon = tr[i].getElementsByTagName("td")[1]; // Columna Razón Social
-        td_estado = tr[i].getElementsByTagName("td")[4]; // Columna Estado
-
-        if (td_cuit || td_razon) {
-            textValue_cuit = td_cuit.textContent || td_cuit.innerText;
-            textValue_razon = td_razon.textContent || td_razon.innerText;
-            textValue_estado = td_estado.textContent || td_estado.innerText;
-            
-            // Lógica de Filtrado: (Buscar en CUIT O Razón Social) Y (Coincidir con Estado)
-            var matchesSearch = (textValue_cuit.toUpperCase().indexOf(filter) > -1 || textValue_razon.toUpperCase().indexOf(filter) > -1);
-            var matchesEstado = (estadoFilter === "" || textValue_estado.toUpperCase() === estadoFilter);
-
-            if (matchesSearch && matchesEstado) {
-                tr[i].style.display = "";
-            }
-        }       
-    }
-}
-</script>
+{% endfor %}
 {% endblock %}
+

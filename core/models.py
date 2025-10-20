@@ -232,26 +232,18 @@ class Productos(models.Model):
 # --- MODELO PROVEEDORES CORREGIDO Y ENFOCADO AL FORMULARIO ---
 class Proveedores(models.Model):
     id_proveedor = models.AutoField(primary_key=True)
-    # CORREGIDO: Usamos razon_social en lugar de nombre para consistencia
+    nombre = models.CharField(max_length=100)
     razon_social = models.CharField(max_length=120) 
-    # CORREGIDO: Añadimos unique=True
     cuit = models.CharField(max_length=30, unique=True) 
-    # Añadido para el formulario
-    
     direccion = models.CharField(max_length=200, blank=True, null=True)
     telefono = models.CharField(max_length=30, blank=True, null=True)
-    
-    # Campo para la Baja Lógica (requerido por las vistas)
+
     is_active = models.BooleanField(default=True)
-    
-    # Campos que puedes mantener o eliminar si no los usas:
-    ciudad = models.CharField(max_length=80, blank=True, null=True)
-    categoria = models.CharField(max_length=80, blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
     persona_contacto = models.CharField(max_length=100, blank=True, null=True)
-    
+
     def __str__(self):
-        return self.razon_social
+        return self.nombre
 
     class Meta:
         # CORRECCIÓN: ELIMINAR managed = False

@@ -1,98 +1,70 @@
-{% extends "core/base.html" %}
+{% extends 'core/base.html' %}
 {% load static %}
 
-{% block title %}
-    {% if object %}Editar Proveedor{% else %}Nuevo Proveedor{% endif %}
-{% endblock %}
+{% block title %}Registrar Proveedor{% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="text-white">
-            {% if object %}
-                <i class="fas fa-pencil-alt me-2"></i> Editar Proveedor: {{ object.razon_social }}
-            {% else %}
-                <i class="fas fa-truck-moving me-2"></i> Nuevo Proveedor
-            {% endif %}
-        </h2>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="text-white">Registrar Nuevo Proveedor</h2>
+    <a href="{% url 'proveedores_list' %}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-2"></i> Volver al Listado
+    </a>
+</div>
 
-    <div class="card bg-dark border-secondary p-4">
-        <form method="post">
-            {% csrf_token %}
+<div class="card p-4" style="background-color: #1f1f1f; border: 1px solid #333333;">
+    <form method="post" novalidate>
+        {% csrf_token %}
+        
+        {% if form.errors %}
+        <div class="alert alert-danger">
+            Todos los campos son obligatorios
+        </div>
+        {% endif %}
 
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <label for="{{ form.cuit.id_for_label }}" class="form-label text-white">CUIT <span class="text-danger">*</span></label>
-                        {{ form.cuit }}
-                        {% if form.cuit.errors %}<div class="text-danger small">{{ form.cuit.errors }}</div>{% endif %}
-                        {% comment %} El campo CUIT debería ser solo lectura al editar, para evitar errores {% endcomment %}
-                        {% if object %}
-                            <p class="text-muted small mt-1">El CUIT no puede modificarse al editar.</p>
-                        {% endif %}
-                    </div>
-                    <div class="mb-3">
-                        <label for="{{ form.razon_social.id_for_label }}" class="form-label text-white">Razón Social <span class="text-danger">*</span></label>
-                        {{ form.razon_social }}
-                        {% if form.razon_social.errors %}<div class="text-danger small">{{ form.razon_social.errors }}</div>{% endif %}
-                    </div>
-                </div>
+        <div class="mb-3">
+            <label for="id_nombre" class="form-label text-white">Nombre <span class="text-danger">*</span></label>
+            <input type="text" name="nombre" class="form-control" id="id_nombre" required>
+        </div>
 
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <label for="{{ form.contacto.id_for_label }}" class="form-label text-white">Persona de Contacto</label>
-                        {{ form.contacto }}
-                        {% if form.contacto.errors %}<div class="text-danger small">{{ form.contacto.errors }}</div>{% endif %}
-                    </div>
-                    <div class="mb-3">
-                        <label for="{{ form.domicilio.id_for_label }}" class="form-label text-white">Domicilio</label>
-                        {{ form.domicilio }}
-                        {% if form.domicilio.errors %}<div class="text-danger small">{{ form.domicilio.errors }}</div>{% endif %}
-                    </div>
-                </div>
-            </div>
+        <div class="mb-3">
+            <label for="id_cuit" class="form-label text-white">CUIT <span class="text-danger">*</span></label>
+            <input type="text" name="cuit" class="form-control" id="id_cuit" required>
+        </div>
 
-            <hr class="border-secondary">
+        <div class="mb-3">
+            <label for="id_razon_social" class="form-label text-white">Razón Social <span class="text-danger">*</span></label>
+            <input type="text" name="razon_social" class="form-control" id="id_razon_social" required>
+        </div>
 
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <label for="{{ form.telefono.id_for_label }}" class="form-label text-white">Teléfono <span class="text-danger">*</span></label>
-                        {{ form.telefono }}
-                        {% if form.telefono.errors %}<div class="text-danger small">{{ form.telefono.errors }}</div>{% endif %}
-                    </div>
-                    <div class="mb-3">
-                        <label for="{{ form.email.id_for_label }}" class="form-label text-white">Email</label>
-                        {{ form.email }}
-                        {% if form.email.errors %}<div class="text-danger small">{{ form.email.errors }}</div>{% endif %}
-                    </div>
-                </div>
+        <div class="mb-3">
+            <label for="id_telefono" class="form-label text-white">Teléfono <span class="text-danger">*</span></label>
+            <input type="text" name="telefono" class="form-control" id="id_telefono" required>
+        </div>
+
+        <div class="mb-3">
+            <label for="id_email" class="form-label text-white">Email <span class="text-danger">*</span></label>
+            <input type="email" name="email" class="form-control" id="id_email" required>
+        </div>
+
+        <div class="mb-3">
+            <label for="id_direccion" class="form-label text-white">Dirección <span class="text-danger">*</span></label>
+            <input type="text" name="direccion" class="form-control" id="id_direccion" required>
+        </div>
+
+        <div class="mb-3">
+            <label for="id_persona_contacto" class="form-label text-white">Persona de Contacto <span class="text-danger">*</span></label>
+            <input type="text" name="persona_contacto" class="form-control" id="id_persona_contacto" required>
+        </div>
+
+<div class="d-flex gap-2 mt-3">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-save me-2"></i> Guardar Proveedor
+                </button>
                 
-                <div class="col-md-6">
-                    {% if object %}
-                    <div class="mb-3">
-                        <label for="{{ form.is_active.id_for_label }}" class="form-label text-white">Estado</label>
-                        {% comment %} Asume un campo boolean o selector llamado 'is_active' {% endcomment %}
-                        {{ form.is_active }}
-                        <div class="form-text text-secondary small">Define si el proveedor está activo o inactivo.</div>
-                        {% if form.is_active.errors %}<div class="text-danger small">{{ form.is_active.errors }}</div>{% endif %}
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-
-            <hr class="border-secondary">
-
-            <div class="d-flex justify-content-end">
-                <a href="{% url 'proveedores_list' %}" class="btn btn-secondary me-2">
+                <a href="{% url 'proveedores_list' %}" class="btn btn-secondary">
                     <i class="fas fa-times me-2"></i> Cancelar
                 </a>
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save me-2"></i> Guardar
-                </button>
             </div>
-        </form>
-    </div>
+    </form>
 </div>
 {% endblock %}

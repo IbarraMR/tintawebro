@@ -18,7 +18,7 @@
 
 {% if user.is_authenticated %}
 <header class="main-header bg-dark text-white py-2 px-3 d-flex align-items-center">
-    <a class="navbar-brand" href="{% url 'home' %}">
+    <a class="navbar-brand" href="/home">
         <img src="{% static 'core/logoTintaBlanco.png' %}" alt="TINTA NEGRA" style="height: 30px;">
     </a>
 </header>
@@ -42,9 +42,9 @@
             </li>
 
             {% if perms.auth.add_user %} 
-            <li class="nav-item mb-2">
-                <a href="{% url 'register' %}" class="btn btn-outline-light w-100 btn-sm text-start">
-                    <i class="fas fa-user-plus me-1"></i> Registrar Usuario
+            <li class="nav-item mb-1">
+                <a class="nav-link text-white" href="{% url 'register' %}">
+                    <i class="fas fa-user-plus me-2"></i> Registrar Usuario
                 </a>
             </li>
             {% endif %}

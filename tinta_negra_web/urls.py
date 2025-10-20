@@ -37,9 +37,10 @@ urlpatterns = [
     path('configuracion/', views.configuracion, name='configuracion'),
 
     # Proveedores (CBVs y funciones)
-    path('proveedores/', views.ProveedorListView.as_view(), name='proveedores_list'),
-    path('proveedores/nuevo/', views.ProveedorCreateView.as_view(), name='proveedor_form'),
-    path('proveedores/<int:pk>/editar/', views.ProveedorUpdateView.as_view(), name='proveedor_update'),
+    path('proveedores/', views.proveedores_list, name='proveedores_list'),
+    path('proveedores/nuevo/', views.proveedor_create, name='proveedor_create'),
+    path('proveedores/<int:pk>/editar/', views.proveedor_edit, name='proveedor_edit'),
     path('proveedores/<int:pk>/baja/', views.proveedor_baja_logica, name='proveedor_baja'),
     path('proveedores/<int:pk>/reactivar/', views.proveedor_reactivar, name='proveedor_reactivar'),
+
 ]

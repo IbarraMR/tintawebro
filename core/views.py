@@ -13,6 +13,7 @@ from .models import Cliente
 
 # Formularios
 from .forms import ClienteForm  # Asegurate de que exista core/forms.py
+from .forms import ProveedorForm  # Formulario para Proveedores
 
 # ----------------------------------------------------------------------
 # REDIRECCIONES Y AUTENTICACIÓN
@@ -167,45 +168,61 @@ def configuracion(request):
     return render(request, 'core/configuracion.html')
 
 # ----------------------------------------------------------------------
-# PROVEEDORES (CBVs y funciones)
+# PROVEEDORES
 # ----------------------------------------------------------------------
 
-# Decoradores CBV
-list_decorators = [never_cache, login_required, permission_required('core.view_proveedores', raise_exception=True)]
-create_decorators = [never_cache, login_required, permission_required('core.add_proveedores', raise_exception=True)]
-update_decorators = [never_cache, login_required, permission_required('core.change_proveedores', raise_exception=True)]
+# Listado de proveedores
+@never_cache
+@login_required
+@permission_required('core.view_proveedores', raise_exception=True)
+def proveedores_list(request):
+    proveedores = Proveedor.objects.all().order_by('razon_social')
+    return render(request, 'core/proveedores/proveedores_list.html', {'proveedores': proveedores})
 
-# Listado
-@method_decorator(list_decorators, name='dispatch')
-class ProveedorListView(ListView):
-    model = Proveedor
-    template_name = "core/proveedores/proveedores_list.html"
-    context_object_name = 'object_list'
+# Crear nuevo proveedor
+@never_cache
+@login_required
+@permission_required('core.add_proveedores', raise_exception=True)
+def proveedor_create(request):
+    if request.method == 'POST':
+        form = ProveedorForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Proveedor registrado exitosamente.')
+            return redirect('proveedores_list')
+        else:
+            messages.error(request, 'Error al registrar el proveedor. Verifica los datos.')
+    else:
+        form = ProveedorForm()
+    
+    return render(request, 'core/proveedores/proveedor_form.html', {
+        'form': form,
+        'title': 'Registrar Nuevo Proveedor',
+        'is_create': True
+    })
 
-    def get_queryset(self):
-        return Proveedor.objects.all().order_by('razon_social')
+# Editar proveedor existente
+@never_cache
+@login_required
+@permission_required('core.change_proveedores', raise_exception=True)
+def proveedor_edit(request, pk):
+    proveedor = get_object_or_404(Proveedor, pk=pk)
+    if request.method == 'POST':
+        form = ProveedorForm(request.POST, instance=proveedor)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Proveedor actualizado exitosamente.')
+            return redirect('proveedores_list')
+        else:
+            messages.error(request, 'Error al actualizar el proveedor. Verifica los datos.')
+    else:
+        form = ProveedorForm(instance=proveedor)
 
-# Creación
-@method_decorator(create_decorators, name='dispatch')
-class ProveedorCreateView(CreateView):
-    model = Proveedor
-    template_name = 'core/proveedores/proveedor_form.html'
-    fields = ['cuit', 'razon_social', 'direccion', 'telefono', 'ciudad', 'categoria']  # ✅ CORREGIDO
-    success_url = '/proveedores/'
-
-# Edición
-@method_decorator(update_decorators, name='dispatch')
-class ProveedorUpdateView(UpdateView):
-    model = Proveedor
-    template_name = 'core/proveedores/proveedor_form.html'
-    fields = ['cuit', 'razon_social', 'direccion', 'telefono', 'ciudad', 'categoria', 'is_active']  # ✅ CORREGIDO
-    success_url = '/proveedores/'
-
-    def get_form(self, form_class=None):
-        form = super().get_form(form_class)
-        if self.object:
-            form.fields['cuit'].widget.attrs['readonly'] = True
-        return form
+    return render(request, 'core/proveedores/proveedor_form.html', {
+        'form': form,
+        'title': f'Editar Proveedor: {proveedor.nombre}',
+        'is_create': False
+    })
 
 # Baja lógica
 @never_cache
