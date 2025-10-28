@@ -1,0 +1,33 @@
+{% extends 'core/base.html' %}
+{% block title %}Cierre de Caja Exitoso{% endblock %}
+
+{% block content %}
+<div class="container text-white mt-4">
+  <h2 class="mb-4">✅ Cierre de Caja Exitoso</h2>
+
+  <div class="card p-4" style="background-color:#1f1f1f; border:1px solid #333;">
+    <p><strong>Empleado:</strong> {{ caja.id_empleado.nombre }} {{ caja.id_empleado.apellido }}</p>
+    <p><strong>Fecha y hora de apertura:</strong> {{ caja.fecha_hora_apertura|date:"d/m/Y H:i:s" }}</p>
+    <p><strong>Fecha y hora de cierre:</strong> {{ caja.fecha_hora_cierre|date:"d/m/Y H:i:s" }}</p>
+    <hr>
+    <p><strong>Saldo inicial:</strong> ${{ caja.saldo_inicial }}</p>
+    <p><strong>Monto físico contado:</strong> ${{ caja.monto_fisico }}</p>
+    <p><strong>Saldo final:</strong> ${{ caja.saldo_final }}</p>
+
+    <p>
+      <strong>Diferencia:</strong>
+      {% if caja.diferencia > 0 %}
+        <span class="text-success">+${{ caja.diferencia }}</span>
+      {% elif caja.diferencia < 0 %}
+        <span class="text-danger">-${{ caja.diferencia|abs }}</span>
+      {% else %}
+        <span class="text-white">$0.00</span>
+      {% endif %}
+    </p>
+  </div>
+
+  <a href="{% url 'cajas_list' %}" class="btn btn-primary mt-3">
+    <i class="fas fa-arrow-left"></i> Volver al listado de cajas
+  </a>
+</div>
+{% endblock %}

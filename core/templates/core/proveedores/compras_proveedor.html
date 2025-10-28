@@ -1,0 +1,40 @@
+{% extends 'core/base.html' %}
+{% block title %}Compras al proveedor {{ proveedor.nombre }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="text-white">Compras al proveedor {{ proveedor.nombre }}</h2>
+    <a href="{% url 'proveedores_list' %}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-2"></i> Volver al Listado
+    </a>
+</div>
+
+<div class="card p-4" style="background-color: #1f1f1f; border: 1px solid #333333;">
+    {% if compras %}
+    <div class="table-responsive">
+        <table class="table table-dark table-hover">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Fecha</th>
+                    <th>Total</th>
+                    <th>Forma de Pago</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for compra in compras %}
+                <tr>
+                    <td>{{ compra.id_compra }}</td>
+                    <td>{{ compra.fecha_compra|date:"d/m/Y H:i" }}</td>
+                    <td>${{ compra.total|floatformat:2 }}</td>
+                    <td>{{ compra.forma_pago|default_if_none:"N/A" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info text-center">No hay compras registradas para este proveedor.</div>
+    {% endif %}
+</div>
+{% endblock %}

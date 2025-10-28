@@ -6,13 +6,21 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="text-white">Listado de Clientes</h2>
+
+
     
-    {% if perms.core.add_clientes %}
+    {% if perms.core.add_cliente %}
     <a href="{% url 'cliente_create' %}" class="btn btn-success">
         <i class="fas fa-user-plus me-2"></i> Registrar Nuevo Cliente
     </a>
     {% endif %}
 </div>
+
+<!-- 🔍 BUSCADOR -->
+<form method="get" class="mb-3 d-flex">
+    <input type="text" name="q" class="form-control me-2" placeholder="Buscar por nombre, apellido, teléfono o DNI" value="{{ query }}">
+    <button type="submit" class="btn btn-primary">Buscar</button>
+</form>
 
 {% if messages %}
     {% for message in messages %}
@@ -48,14 +56,21 @@
                     <td>{{ cliente.email|default_if_none:"N/A" }}</td>
                     <td>{{ cliente.direccion|default_if_none:"N/A" }}</td>
                     <td class="text-center">
-                        
-                        {% if perms.core.change_clientes %}
+
+                        <!-- 🛒 VER COMPRAS -->
+                        <a href="{% url 'compras_cliente' pk=cliente.id_cliente %}" class="btn btn-sm btn-warning me-2" title="Ver Compras">
+                            <i class="fas fa-shopping-cart"></i>
+                        </a>
+
+                        <!-- ✏️ EDITAR -->
+                        {% if perms.core.change_cliente %}
                         <a href="{% url 'cliente_edit' pk=cliente.id_cliente %}" class="btn btn-sm btn-info me-2" title="Editar">
                             <i class="fas fa-edit"></i>
                         </a>
                         {% endif %}
                         
-                        {% if perms.core.delete_clientes %}
+                        <!-- 🗑️ ELIMINAR -->
+                        {% if perms.core.delete_cliente %}
                         <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal-{{ cliente.id_cliente }}" title="Eliminar">
                             <i class="fas fa-trash-alt"></i>
                         </button>
@@ -73,6 +88,7 @@
     {% endif %}
 </div>
 
+<!-- ⚠️ MODALES DE ELIMINACIÓN -->
 {% for cliente in clientes %}
 <div class="modal fade" id="deleteModal-{{ cliente.id_cliente }}" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -82,7 +98,9 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body text-secondary">
-                ¿Estás seguro de que quieres eliminar al cliente <strong>{{ cliente.nombre }} {{ cliente.apellido }}</strong>? Esta acción no se puede deshacer.
+                ¿Estás seguro de que quieres eliminar al cliente 
+                <strong>{{ cliente.nombre }} {{ cliente.apellido }}</strong>? 
+                Esta acción no se puede deshacer.
             </div>
             <div class="modal-footer border-top-0">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>

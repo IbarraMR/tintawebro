@@ -6,10 +6,11 @@
 {% block content %}
     
     <h2 class="mb-4 text-white">Bienvenido, {{ request.user.username|title }}</h2>
-    <p class="text-secondary mb-5">Aquí encontrarás un resumen de tus tareas y el estado del stock.</p>
+    <p class="text-secondary mb-5">Aquí encontrarás un resumen de tus tareas y el estado general del stock.</p>
 
-    <div class="row g-4">
-        
+    <div class="row g-4 mb-5">
+
+        <!-- Mis pedidos pendientes -->
         <div class="col-xl-3 col-md-6">
             <div class="dashboard-card border-warning position-relative">
                 <div class="d-flex align-items-center">
@@ -19,10 +20,11 @@
                         <h3 class="mb-0 text-white">{{ pedidos_pendientes_count }}</h3> 
                     </div>
                 </div>
-                <a href="{% url 'pedidos_list' %}" class="stretched-link small text-secondary mt-2 d-block">Ver mis tareas</a>
+                <a href="{% url 'pedidos_list' %}" class="stretched-link small text-secondary mt-2 d-block">Ver pedidos</a>
             </div>
         </div>
 
+        <!-- Insumos en stock mínimo -->
         <div class="col-xl-3 col-md-6">
             <div class="dashboard-card border-danger position-relative">
                 <div class="d-flex align-items-center">
@@ -35,27 +37,75 @@
                 <a href="{% url 'insumos_list' %}" class="stretched-link small text-secondary mt-2 d-block">Revisar stock</a>
             </div>
         </div>
-        
-        </div> <div class="row mt-5">
+
+        <!-- Total de clientes -->
+        <div class="col-xl-3 col-md-6">
+            <div class="dashboard-card border-info position-relative">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-users fa-3x text-info me-3"></i>
+                    <div>
+                        <div class="text-uppercase text-secondary small">Clientes Activos</div>
+                        <h3 class="mb-0 text-white">{{ clientes_total_count }}</h3> 
+                    </div>
+                </div>
+                <a href="{% url 'clientes_list' %}" class="stretched-link small text-secondary mt-2 d-block">Ver listado</a>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="row mt-4">
         <div class="col-lg-12">
             <div class="p-4" style="background-color: #1f1f1f; border-radius: 8px; border: 1px solid #333333;">
                 <h5 class="text-white mb-3">Accesos Rápidos</h5>
-                <p class="text-secondary">Utiliza estos botones para ir a tus tareas más frecuentes.</p>
-                <div class="d-flex gap-3 mt-4">
+                <p class="text-secondary">Utiliza estos accesos para tus tareas más frecuentes.</p>
+                <div class="d-flex flex-wrap gap-3 mt-4">
+
+                    <!-- Gestionar pedidos -->
+                    {% if perms.core.view_pedidos %}
                     <a href="{% url 'pedidos_list' %}" class="btn btn-lg btn-warning">
                         <i class="fas fa-list-check me-2"></i> Gestionar Pedidos
                     </a>
-                    {% if perms.core.add_insumos %}
-                    <a href="#" class="btn btn-lg btn-success">
-                        <i class="fas fa-plus me-2"></i> Añadir Stock
-                    </a>
                     {% endif %}
+
+                    <!-- Crear presupuestos -->
                     {% if perms.core.add_presupuestos %}
-                    <a href="#" class="btn btn-lg btn-info">
+                    <a href="{% url 'presupuestos_list' %}" class="btn btn-lg btn-info text-white">
                         <i class="fas fa-file-invoice-dollar me-2"></i> Crear Presupuesto
                     </a>
                     {% endif %}
+
+                    <!-- Agregar insumos -->
+                    {% if perms.core.add_insumos %}
+                    <a href="{% url 'insumos_list' %}" class="btn btn-lg btn-success text-white">
+                        <i class="fas fa-plus me-2"></i> Añadir Stock
+                    </a>
+                    {% endif %}
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-5">
+        <!-- Sección informativa -->
+        <div class="col-lg-6 mb-4">
+            <div class="p-4" style="background-color: #1f1f1f; border-radius: 8px; border: 1px solid #333333; height: 320px;">
+                <h5 class="text-white mb-3">Resumen de Actividad</h5>
+                <p class="text-secondary">Aquí podrás ver un resumen de tus pedidos y presupuestos semanales.</p>
+                <p class="text-secondary">*Esta sección podrá incluir un gráfico o lista más adelante.*</p>
+            </div>
+        </div>
+
+        <!-- Sección de ayuda -->
+        <div class="col-lg-6 mb-4">
+            <div class="p-4" style="background-color: #1f1f1f; border-radius: 8px; border: 1px solid #333333; height: 320px;">
+                <h5 class="text-white mb-3">Ayuda Rápida</h5>
+                <p class="text-secondary">Recordá que podés comunicarte con el encargado o revisar tus tareas asignadas desde la sección de pedidos.</p>
+                <ul class="text-secondary mt-3">
+                    <li>Revisá tu stock antes de iniciar un trabajo.</li>
+                    <li>Actualizá el estado de tus pedidos al completarlos.</li>
+                    <li>Verificá los insumos disponibles antes de presupuestar.</li>
+                </ul>
             </div>
         </div>
     </div>

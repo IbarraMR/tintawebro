@@ -1,0 +1,72 @@
+{% extends 'core/base.html' %}
+{% load static %}
+{% load form_tags %}
+{% block title %}Registrar Nuevo Empleado{% endblock %}
+
+{% block content %}
+<h2 class="text-white mb-4">{{ title }}</h2>
+<p class="text-muted">Complete los campos para registrar un nuevo empleado.</p>
+
+<div class="card p-4" style="background-color: #1f1f1f; border: 1px solid #333;">
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <label for="id_nombre" class="form-label text-white">Nombre *</label>
+        {{ form.nombre|add_class:"form-control" }}
+      </div>
+      <div class="col-md-6">
+        <label for="id_apellido" class="form-label text-white">Apellido</label>
+        {{ form.apellido|add_class:"form-control" }}
+      </div>
+    </div>
+
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <label for="id_dni" class="form-label text-white">DNI</label>
+        {{ form.dni|add_class:"form-control" }}
+      </div>
+      <div class="col-md-6">
+        <label for="id_telefono" class="form-label text-white">Teléfono</label>
+        {{ form.telefono|add_class:"form-control" }}
+      </div>
+    </div>
+
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <label for="id_email" class="form-label text-white">Email</label>
+        {{ form.email|add_class:"form-control" }}
+      </div>
+      <div class="col-md-6">
+        <label for="id_direccion" class="form-label text-white">Dirección</label>
+        {{ form.direccion|add_class:"form-control" }}
+      </div>
+    </div>
+
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <label for="id_fecha_nacimiento" class="form-label text-white">Fecha de nacimiento</label>
+        {{ form.fecha_nacimiento|add_class:"form-control" }}
+      </div>
+      <div class="col-md-6">
+        <label for="id_rol" class="form-label text-white">Rol</label>
+        {{ form.rol|add_class:"form-select" }}
+      </div>
+    </div>
+
+    <div class="mb-3 form-check">
+      {{ form.is_active|add_class:"form-check-input" }}
+      <label for="id_is_active" class="form-check-label text-white">Activo</label>
+    </div>
+
+    <div class="d-flex justify-content-start mt-4">
+      <button type="submit" class="btn btn-success me-2">
+        <i class="fas fa-save me-1"></i> Guardar Empleado
+      </button>
+      <a href="{% url 'empleados_list' %}" class="btn btn-secondary">
+        <i class="fas fa-times me-1"></i> Cancelar
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

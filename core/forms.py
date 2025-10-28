@@ -3,6 +3,8 @@
 from django import forms
 from .models import Cliente
 from .models import Proveedores
+from .models import Empleados
+from django.core.exceptions import ValidationError
 
 class ClienteForm(forms.ModelForm):
     """
@@ -48,4 +50,39 @@ class ProveedorForm(forms.ModelForm):
         for field in self.fields:
             if not cleaned_data.get(field):
                 raise forms.ValidationError("Todos los campos son obligatorios")
+        return cleaned_data
+    
+
+class EmpleadoForm(forms.ModelForm):
+    ROLES = [
+        ('Jefe', 'Jefe'),
+        ('Empleado', 'Empleado'),
+        ('Diseñador', 'Diseñador'),
+        ('Producción', 'Producción'),
+    ]
+
+    rol = forms.ChoiceField(choices=ROLES, required=False, label="Rol")
+
+    class Meta:
+        model = Empleados
+        fields = '__all__'
+        widgets = {
+            'fecha_nacimiento': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        dni = cleaned_data.get('dni')
+        telefono = cleaned_data.get('telefono')
+        email = cleaned_data.get('email')
+
+        if Empleados.objects.filter(dni=dni).exclude(pk=self.instance.pk).exists():
+            raise ValidationError("Ya existe un empleado con ese DNI.")
+
+        if Empleados.objects.filter(telefono=telefono).exclude(pk=self.instance.pk).exists():
+            raise ValidationError("Ya existe un empleado con ese teléfono.")
+
+        if Empleados.objects.filter(email=email).exclude(pk=self.instance.pk).exists():
+            raise ValidationError("Ya existe un empleado con ese email.")
+
         return cleaned_data
