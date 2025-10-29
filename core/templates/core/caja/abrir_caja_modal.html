@@ -1,0 +1,16 @@
+{% extends 'core/base.html' %}
+{% block title %}Abrir Caja{% endblock %}
+{% block content %}
+<div class="container mt-4 text-white">
+  <h3 class="mb-3">Abrir Caja</h3>
+  <form method="post" action="{% url 'abrir_caja' %}">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label for="saldo_inicial" class="form-label">Saldo inicial</label>
+      <input type="number" step="0.01" class="form-control" id="saldo_inicial" name="saldo_inicial" value="0" required>
+    </div>
+    <button type="submit" class="btn btn-success">Abrir</button>
+    <a href="{% url 'cajas_list' %}" class="btn btn-secondary ms-2">Cancelar</a>
+  </form>
+</div>
+{% endblock %}

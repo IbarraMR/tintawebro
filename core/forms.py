@@ -1,10 +1,11 @@
-# core/forms.py
-
 from django import forms
 from .models import Cliente
 from .models import Proveedores
 from .models import Empleados
+from .models import Insumos
 from django.core.exceptions import ValidationError
+from .models import MovimientosCaja, FormaPago
+from core.models import FormaPago
 
 class ClienteForm(forms.ModelForm):
     """
@@ -46,7 +47,6 @@ class ProveedorForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        # Verifica si algún campo está vacío
         for field in self.fields:
             if not cleaned_data.get(field):
                 raise forms.ValidationError("Todos los campos son obligatorios")
@@ -86,3 +86,48 @@ class EmpleadoForm(forms.ModelForm):
             raise ValidationError("Ya existe un empleado con ese email.")
 
         return cleaned_data
+    
+
+class MovimientoCajaForm(forms.ModelForm):
+    class Meta:
+        model = MovimientosCaja
+        fields = ['tipo', 'forma_pago', 'monto', 'descripcion']
+        widgets = {
+            'tipo': forms.Select(attrs={'class': 'form-select'}),
+            'forma_pago': forms.Select(attrs={'class': 'form-select'}),
+            'monto': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
+            'descripcion': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Descripción'}),
+        }
+
+
+class FormaPagoForm(forms.ModelForm):
+    class Meta:
+        model = FormaPago
+        fields = ["nombre", "activo"]
+        widgets = {
+            "nombre": forms.TextInput(attrs={"class": "form-control", "placeholder": "Ej: Tarjeta"}),
+        }
+
+
+
+class InsumoForm(forms.ModelForm):
+    class Meta:
+        model = Insumos
+        fields = [
+            'proveedor',
+            'nombre',
+            'descripcion',
+            'unidad_medida',
+            'stock_actual',
+            'stock_minimo',
+            'precio_costo_unitario'
+        ]
+        widgets = {
+            'proveedor': forms.Select(attrs={'class': 'form-select', 'required': True}),
+            'nombre': forms.TextInput(attrs={'class': 'form-control', 'required': True, 'placeholder': "Nombre del insumo"}),
+            'descripcion': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+            'unidad_medida': forms.TextInput(attrs={'class': 'form-control', 'placeholder': "Ej: resma 500 hojas"}),
+            'stock_actual': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'stock_minimo': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'precio_costo_unitario': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': 0})
+        }

@@ -1,61 +1,211 @@
 {% extends 'core/base.html' %}
 {% load static %}
 
-{% block title %}Stock de Insumos{% endblock %}
+{% block title %} Stock de Insumos {% endblock %}
 
 {% block content %}
-    
-    <h2 class="mb-4 text-white">Stock de Insumos</h2>
 
-    <div class="d-flex justify-content-between mb-4 align-items-center">
-        <div class="input-group search-input-group" style="max-width: 400px;">
-            <input type="text" class="form-control" placeholder="Buscar insumo...">
-            <button class="btn btn-custom" type="button">
-                <i class="fas fa-search"></i>
-            </button>
-        </div>
-        <button class="btn btn-custom">
-            <i class="fas fa-plus me-1"></i> Nuevo Insumo
+<div class="container mt-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="text-white"><i class="fas fa-box me-2"></i> Stock de Insumos</h3>
+
+        {% if perms.core.add_insumos %}
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalInsumo">
+            <i class="fas fa-plus"></i> Nuevo Insumo
         </button>
+        {% endif %}
     </div>
-    
-    <div class="card p-4" style="background-color: #1f1f1f; border: 1px solid #333333;">
 
-        <div class="table-responsive">
-            <table class="table table-dark table-hover align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th style="width: 8%;">ID</th>
-                        <th style="width: 20%;">Nombre</th>
-                        <th style="width: 25%;">Descripción</th>
-                        <th style="width: 12%;">Medida</th>
-                        <th style="width: 10%;">Stock Actual</th>
-                        <th style="width: 10%;">Stock Mínimo</th>
-                        <th style="width: 10%;">Costo Unitario</th>
-                        <th style="width: 5%;">Acciones</th> </tr>
-                </thead>
-                <tbody>
-                    {% for insumo in insumos %}
-                    <tr>
-                        <td>#{{ insumo.id_insumo }}</td>
-                        <td>{{ insumo.nombre }}</td>
-                        <td>{{ insumo.descripcion }}</td>
-                        <td>{{ insumo.unidad_medida }}</td>
-                        <td>{{ insumo.stock_actual }}</td>
-                        <td>{{ insumo.stock_minimo }}</td>
-                        <td>${{ insumo.precio_costo_unitario }}</td>
-                        <td>
-                            <a href="#" class="text-secondary" title="Modificar"><i class="fas fa-pencil-alt"></i></a>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="8" class="text-center text-secondary">No hay insumos cargados.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <table class="table table-dark table-hover text-center align-middle">
+        <thead class="table-primary">
+            <tr>
+                <th>Nombre</th>
+                <th>Unidad</th>
+                <th>Stock</th>
+                <th>Stock Mínimo</th>
+                <th>Precio Costo</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for insumo in insumos %}
+                <tr class="{% if insumo.stock_actual <= insumo.stock_minimo %}table-danger{% endif %}">
+                    <td>{{ insumo.nombre }}</td>
+                    <td>{{ insumo.unidad_medida }}</td>
+                    <td>{{ insumo.stock_actual }}</td>
+                    <td>{{ insumo.stock_minimo }}</td>
+                    <td>$ {{ insumo.precio_costo_unitario }}</td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="5">No hay insumos registrados.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</div>
+
+
+<!-- ================================
+     MODAL CREAR INSUMO
+================================ -->
+<div class="modal fade" id="modalInsumo" tabindex="-1" aria-labelledby="modalInsumoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-white">
+
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="modalInsumoLabel">Agregar nuevo insumo</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form id="formInsumo">
+                {% csrf_token %}
+                <div class="modal-body">
+
+                    <div class="mb-3">
+                        <label class="form-label">Proveedor *</label>
+                        <select id="proveedor" name="proveedor" class="form-select" required>
+                            <option value="">Seleccionar proveedor...</option>
+                            {% for p in proveedores %}
+                                <option value="{{ p.id_proveedor }}">{{ p.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-info d-block mt-1" style="cursor:pointer"
+                               data-bs-toggle="modal" data-bs-target="#modalProveedor">
+                            + Agregar proveedor rápido
+                        </small>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Nombre *</label>
+                            <input type="text" name="nombre" class="form-control" required>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Unidad de medida *</label>
+                            <input type="text" name="unidad_medida" class="form-control" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Descripción</label>
+                        <textarea name="descripcion" rows="2" class="form-control"></textarea>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Stock actual *</label>
+                            <input type="number" name="stock_actual" class="form-control" required>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Stock mínimo *</label>
+                            <input type="number" name="stock_minimo" class="form-control" required>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Precio costo unitario *</label>
+                            <input type="number" step="0.01" name="precio_costo_unitario" class="form-control" required>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="modal-footer border-secondary">
+                    <button type="submit" class="btn btn-success w-100">Guardar</button>
+                </div>
+            </form>
+
         </div>
-        
     </div>
+</div>
+
+
+<!-- ================================
+     MODAL AGREGAR PROVEEDOR RÁPIDO
+================================ -->
+<div class="modal fade" id="modalProveedor" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-white">
+            <form id="formProveedor">
+                {% csrf_token %}
+
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title">Agregar Proveedor</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <input type="text" name="nombre" class="form-control" placeholder="Nombre *" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <input type="text" name="cuit" class="form-control" placeholder="CUIT *" required>
+                        </div>
+                    </div>
+
+                    <input type="text" name="razon_social" class="form-control mb-3" placeholder="Razón Social *" required>
+                    <input type="text" name="telefono" class="form-control mb-3" placeholder="Teléfono *" required>
+                    <input type="email" name="email" class="form-control mb-3" placeholder="Email *" required>
+                    <input type="text" name="direccion" class="form-control mb-3" placeholder="Dirección *" required>
+                    <input type="text" name="persona_contacto" class="form-control mb-3" placeholder="Persona de contacto *" required>
+                </div>
+
+                <div class="modal-footer border-secondary">
+                    <button type="submit" class="btn btn-info w-100">Guardar proveedor</button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+/* ✅ Guardar INSUMO con AJAX */
+document.getElementById("formInsumo").addEventListener("submit", function (e) {
+    e.preventDefault();
+
+    fetch("{% url 'insumo_create_ajax' %}", {
+        method: "POST",
+        body: new FormData(this)
+    })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert("Error al guardar insumo");
+            }
+        });
+});
+
+/* ✅ Guardar PROVEEDOR rápido desde el modal */
+document.getElementById("formProveedor").addEventListener("submit", function (e) {
+    e.preventDefault();
+
+    fetch("{% url 'proveedor_create_ajax' %}", {
+        method: "POST",
+        body: new FormData(this)
+    })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // Cerrar modal proveedor
+                document.querySelector('#modalProveedor .btn-close').click();
+
+                // Agregar proveedor recién creado al select
+                let combo = document.getElementById("proveedor");
+                combo.innerHTML += `<option value="${data.id}" selected>${data.nombre}</option>`;
+            }
+        });
+});
+</script>
 {% endblock %}

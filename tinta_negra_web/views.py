@@ -5,13 +5,22 @@ from django.views.decorators.cache import never_cache
 from django.contrib.auth.models import User, Group
 from django.contrib import messages
 from django.utils import timezone
-from .models import Proveedores as Proveedor
-from .models import Cliente, Cajas, MovimientosCaja, Empleados
-from .forms import ClienteForm, ProveedorForm, EmpleadoForm
-from .models import Compras
+from core.models import Proveedores as Proveedor
+from core.models import Cliente, Cajas, MovimientosCaja, Empleados, AuditoriaCaja, FormaPago
+from core.forms import ClienteForm, ProveedorForm, EmpleadoForm, MovimientoCajaForm, FormaPagoForm
+from core.models import Compras
 from django.db.models import Q
 from django.contrib.auth.hashers import make_password
-
+from django.db import transaction
+from core.utils_caja import caja_abierta_de, registrar_movimiento
+from django.views.decorators.http import require_http_methods
+from django.core.paginator import Paginator
+from django.http import JsonResponse
+from django.shortcuts import render, redirect
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required, permission_required
+from core.models import Compras, DetalleCompra, Insumos, Proveedores, MovimientosCaja, Cajas
+from core.forms import ProveedorForm, InsumoForm
 
 
 # ----------------------------------------------------------------------
@@ -254,70 +263,193 @@ def proveedor_reactivar(request, pk):
 @never_cache
 @login_required
 def cajas_list(request):
-    cajas = Cajas.objects.all().order_by('-id_caja')
-    return render(request, 'core/caja/cajas_list.html', {'cajas': cajas})
+    empleado = Empleados.objects.filter(user=request.user).first()
+    caja = None
+    if empleado:
+        caja = Cajas.objects.filter(id_empleado=empleado, caja_cerrada=False).order_by('-id_caja').first()
+    if empleado:
+        cajas = Cajas.objects.filter(id_empleado=empleado).order_by('-id_caja')[:50]
+    else:
+        cajas = Cajas.objects.none()
+    return render(request, 'core/caja/cajas_list.html', {
+        'caja': caja,
+        'cajas': cajas,
+    })
 
 
 @never_cache
 @login_required
+@permission_required('core.add_cajas', raise_exception=True)
+@transaction.atomic
+@require_http_methods(["GET", "POST"])
 def abrir_caja_view(request):
-    empleado = Empleados.objects.get(user=request.user)
-    caja_abierta = Cajas.objects.filter(caja_cerrada=0).first()
+    empleado = Empleados.objects.filter(user=request.user).first()
+    if not empleado:
+        messages.error(request, "No tenés un Empleado asociado a tu usuario. Crealo y asociá tu User primero.")
+        return redirect('empleados_list')
 
-    if caja_abierta:
-        messages.warning(request, "Ya existe una caja abierta.")
+    ya_abierta = Cajas.objects.filter(id_empleado=empleado, caja_cerrada=False).exists()
+    if ya_abierta:
+        messages.warning(request, "Ya tenés una caja abierta.")
         return redirect('cajas_list')
 
     if request.method == 'POST':
-        saldo_inicial = request.POST.get('saldo_inicial', 0)
-        Cajas.objects.create(
+        saldo_inicial_raw = request.POST.get('saldo_inicial', '0')
+        try:
+            saldo_inicial = float(saldo_inicial_raw or 0)
+        except ValueError:
+            messages.error(request, "Saldo inicial inválido.")
+            return redirect('cajas_list')
+
+        caja = Cajas.objects.create(
             id_empleado=empleado,
             saldo_inicial=saldo_inicial,
+            saldo_final=saldo_inicial,
             fecha_hora_apertura=timezone.now(),
-            caja_cerrada=0
+            diferencia=0,
+            tolerancia=100,
+            descripcion="Apertura de caja",
+            caja_cerrada=False
         )
-        messages.success(request, f"Caja abierta con saldo inicial ${saldo_inicial}")
-        return redirect('cajas_list')
 
-    return render(request, 'core/caja/abrir_caja.html')
+        AuditoriaCaja.objects.create(
+            caja=caja,
+            usuario=request.user,
+            accion=AuditoriaCaja.Accion.ABRIR,
+            detalle=f"Apertura con saldo inicial ${saldo_inicial:,.2f}"
+        )
+        messages.success(request, "Caja abierta correctamente.")
+        return redirect('cajas_list')
+    return render(request, 'core/caja/abrir_caja_modal.html')
 
 
 @never_cache
 @login_required
+@permission_required('core.change_cajas', raise_exception=True)
+@transaction.atomic
+@require_http_methods(["GET", "POST"])
 def cerrar_caja_view(request):
-    caja_abierta = Cajas.objects.filter(caja_cerrada=False).first()
-
-    if not caja_abierta:
-        messages.warning(request, "No hay ninguna caja abierta actualmente.")
+    empleado = Empleados.objects.filter(user=request.user).first()
+    if not empleado:
+        messages.error(request, "No tenés un Empleado asociado a tu usuario.")
+        return redirect('empleados_list')
+    caja = Cajas.objects.filter(id_empleado=empleado, caja_cerrada=False).order_by('-id_caja').first()
+    if not caja:
+        messages.warning(request, "No hay ninguna caja abierta.")
         return redirect('cajas_list')
-
     if request.method == 'POST':
         try:
-            monto_fisico = float(request.POST.get('monto_fisico', 0))
+            monto_fisico = float(request.POST.get('monto_fisico', '0') or 0)
         except ValueError:
-            messages.error(request, "El monto ingresado no es válido.")
-            return redirect('cerrar_caja')
+            messages.error(request, "Monto físico inválido.")
+            return redirect('cajas_list')
+        saldo_sistema = float(caja.saldo_sistema)
+        diferencia = round(monto_fisico - saldo_sistema, 2)
+        caja.monto_fisico = monto_fisico
+        caja.diferencia = diferencia
+        caja.saldo_final = saldo_sistema
+        caja.fecha_hora_cierre = timezone.now()
+        caja.caja_cerrada = True
+        caja.save()
+        AuditoriaCaja.objects.create(
+            caja=caja,
+            usuario=request.user,
+            accion=AuditoriaCaja.Accion.CERRAR,
+            detalle=f"Cierre: sistema ${saldo_sistema:,.2f}, físico ${monto_fisico:,.2f}, dif ${diferencia:,.2f}"
+        )
+        request.session['cierre_info'] = {
+            'sistema': f"{saldo_sistema:,.2f}",
+            'fisico': f"{monto_fisico:,.2f}",
+            'dif': f"{diferencia:,.2f}",
+            'dentro_tol': abs(diferencia) <= float(caja.tolerancia),
+        }
+        messages.success(request, "Caja cerrada correctamente.")
+        return redirect('cajas_list')
+    return render(request, 'core/caja/cerrar_caja_modal.html', {
+        'saldo_sistema': caja.saldo_sistema
+    })
 
-        saldo_final = caja_abierta.saldo_inicial
-        diferencia = monto_fisico - saldo_final
-        caja_abierta.fecha_hora_cierre = timezone.now()
-        caja_abierta.monto_fisico = monto_fisico
-        caja_abierta.saldo_final = saldo_final
-        caja_abierta.diferencia = diferencia
-        caja_abierta.caja_cerrada = True
-        caja_abierta.save()
 
-        if diferencia == 0:
-            messages.success(request, f"Caja cerrada correctamente. Monto exacto ${monto_fisico:.2f}.")
-        elif diferencia > 0:
-            messages.warning(request, f"Caja cerrada con sobrante de ${diferencia:.2f}.")
-        else:
-            messages.error(request, f"Caja cerrada con faltante de ${abs(diferencia):.2f}.")
 
-        return render(request, 'core/caja/cierre_exitoso.html', {'caja': caja_abierta})
+@never_cache
+@login_required
+@permission_required('core.view_movimientoscaja', raise_exception=True)
+def movimientos_list(request):
 
-    return render(request, 'core/caja/cerrar_caja.html', {'caja': caja_abierta})
+    q = request.GET.get("q", "")
+    desde = request.GET.get("desde")
+    hasta = request.GET.get("hasta")
+    forma_pago = request.GET.get("forma_pago")
 
+    movs = MovimientosCaja.objects.all().order_by("-fecha_hora")  # ✅ trae todos
+
+    if q:
+        movs = movs.filter(Q(descripcion__icontains=q) | Q(id__icontains=q))
+
+    if desde:
+        movs = movs.filter(fecha_hora__date__gte=desde)
+    if hasta:
+        movs = movs.filter(fecha_hora__date__lte=hasta)
+
+    if forma_pago:
+        movs = movs.filter(forma_pago__id_forma=forma_pago)
+
+    from django.core.paginator import Paginator
+    paginator = Paginator(movs, 20)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    formas_pago = FormaPago.objects.all()
+    form = MovimientoCajaForm()
+
+    return render(request, "core/caja/movimientos_list.html", {
+        "movs": page_obj,
+        "page_obj": page_obj,
+        "form": form,
+        "formas_pago": formas_pago,
+        "filtro_busqueda": q,
+        "filtro_fecha_desde": desde,
+        "filtro_fecha_hasta": hasta,
+        "filtro_forma_pago": forma_pago,
+    })
+
+
+
+@never_cache
+@login_required
+@permission_required('core.add_movimientoscaja', raise_exception=True)
+def movimiento_create(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido"}, status=405)
+
+    form = MovimientoCajaForm(request.POST)
+    if not form.is_valid():
+        return JsonResponse({"error": "Datos inválidos"}, status=400)
+
+    cd = form.cleaned_data
+    mov, err = registrar_movimiento(
+        request,
+        tipo=cd["tipo"],
+        forma_pago_id=cd["forma_pago"].id_forma,
+        monto=cd["monto"],
+        descripcion=cd["descripcion"],
+        origen=MovimientosCaja.Origen.MANUAL
+    )
+    if err:
+        return JsonResponse({"error": err}, status=400)
+
+    return JsonResponse({
+        "success": True,
+        "mov": {
+            "id": mov.id,                                               # <- PK real
+            "fecha_hora": mov.fecha_hora.strftime("%d/%m/%Y %H:%M"),
+            "tipo": mov.get_tipo_display(),
+            "monto": f"{mov.monto:,.2f}",
+            "descripcion": mov.descripcion,
+            "caja": mov.caja.id_caja
+        },
+        "saldoActualizado": f"{mov.saldo_resultante:,.2f}"
+    })
 
 
 
@@ -325,8 +457,48 @@ def cerrar_caja_view(request):
 @login_required
 def detalle_caja_view(request, id):
     caja = get_object_or_404(Cajas, id_caja=id)
-    movimientos = MovimientosCaja.objects.filter(id_caja=caja)
+    movimientos = MovimientosCaja.objects.filter(caja=caja).order_by('-fecha_hora')
     return render(request, 'core/caja/detalle_caja.html', {'caja': caja, 'movimientos': movimientos})
+
+# FORMAS DE PAGO ------------------------------------------------------
+
+@never_cache
+@login_required
+@permission_required('core.view_formapago', raise_exception=True)
+def formas_pago_list(request):
+    formas_pago = FormaPago.objects.all().order_by('id_forma')
+    form = FormaPagoForm()  # ← AGREGADO: pasar formulario al template
+    return render(request, "core/caja/formas_pago_list.html", {
+        "formas_pago": formas_pago,
+        "form": form
+    })
+
+
+
+@never_cache
+@login_required
+@permission_required('core.add_formapago', raise_exception=True)
+def formas_pago_create(request):
+    if request.method == "POST":
+        form = FormaPagoForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "✅ Forma de pago agregada correctamente.")
+        else:
+            messages.error(request, "❌ Error al agregar la forma de pago.")
+    return redirect("formas_pago_list")
+
+
+
+@never_cache
+@login_required
+@permission_required('core.change_formapago', raise_exception=True)
+def formas_pago_toggle(request, id):
+    forma = get_object_or_404(FormaPago, id_forma=id)
+    forma.activo = not forma.activo
+    forma.save()
+    messages.info(request, f"🔁 Estado actualizado: {forma.nombre}")
+    return redirect("formas_pago_list")
 
 
 @never_cache
@@ -346,10 +518,19 @@ def presupuestos_list(request):
 
 @never_cache
 @login_required
-@permission_required('core.view_insumos', raise_exception=True)
+@permission_required("core.view_insumos", raise_exception=True)
 def insumos_list(request):
-    insumos = []
-    return render(request, 'core/insumos_list.html', {'insumos': insumos})
+
+    insumos = Insumos.objects.select_related("proveedor").all()
+    proveedores = Proveedores.objects.all()      
+    form = InsumoForm()
+
+    return render(request, "core/insumos_list.html", {
+        "insumos": insumos,
+        "form": form,
+        "proveedores": proveedores,            
+    })
+
 
 @never_cache
 @login_required
@@ -364,8 +545,6 @@ def compras_list(request):
 def empleados_list(request):
     query = request.GET.get('q', '').strip()
     empleados = Empleados.objects.all().order_by('nombre')
-
-    # 🔍 Búsqueda
     if query:
         empleados = empleados.filter(
             Q(nombre__icontains=query) |
@@ -583,3 +762,108 @@ def empleado_reactivar(request, pk):
     empleado.save()
     messages.success(request, f"Empleado {empleado.nombre} {empleado.apellido} reactivado correctamente.")
     return redirect('empleados_list')
+
+@login_required
+@permission_required("core.add_compras", raise_exception=True)
+def compras_create(request):
+    if request.method == "POST":
+        proveedor_id = request.POST.get("proveedor")
+        insumo_id = request.POST.get("insumo")
+        cantidad = request.POST.get("cantidad")
+        precio_unitario = request.POST.get("precio_unitario")
+
+        proveedor = Proveedores.objects.get(id_proveedor=proveedor_id)
+        insumo = Insumos.objects.get(id_insumo=insumo_id)
+
+        # obtenemos la caja abierta del empleado
+        caja = Cajas.objects.filter(empleado=request.user.empleados, estado="ABIERTA").first()
+
+        if not caja:
+            return render(request, "compras/compras_form.html", {
+                "error": "No hay una caja abierta. Debe abrir caja para registrar compras.",
+                "proveedor_form": ProveedorForm(),
+                "insumo_form": InsumoForm(),
+            })
+
+        total = float(precio_unitario) * float(cantidad)
+
+        # VALIDAR SALDO SUFICIENTE
+        if caja.saldo_actual < total:
+            return render(request, "compras/compras_form.html", {
+                "error": "Saldo insuficiente en caja.",
+                "proveedor_form": ProveedorForm(),
+                "insumo_form": InsumoForm(),
+            })
+
+        # Guardamos compra
+        compra = Compras.objects.create(
+            proveedor=proveedor,
+            empleado=request.user.empleados,
+            total=total
+        )
+
+        # Guardamos detalle de compra
+        DetalleCompra.objects.create(
+            compra=compra,
+            insumo=insumo,
+            cantidad=cantidad,
+            precio_unitario=precio_unitario
+        )
+
+        # Actualiza el stock del insumo
+        insumo.stock += float(cantidad)
+        insumo.save()
+
+        # Genera movimiento de caja
+        MovimientosCaja.objects.create(
+            caja=caja,
+            tipo="EGRESO",
+            descripcion=f"Compra de insumo: {insumo.nombre}",
+            monto=total,
+        )
+
+        # Resta saldo en caja
+        caja.saldo_actual -= total
+        caja.save()
+
+        return redirect("compras_list")  # o donde corresponda
+
+    # GET (primera carga del formulario)
+    return render(request, "compras/compras_form.html", {
+        "proveedor_form": ProveedorForm(),
+        "insumo_form": InsumoForm(),
+    })
+
+
+@never_cache
+@login_required
+@permission_required("core.add_proveedores", raise_exception=True)
+def proveedor_create_ajax(request):
+    if request.method == "POST":
+        form = ProveedorForm(request.POST)
+        if form.is_valid():
+            proveedor = form.save()
+            return JsonResponse({
+                "success": True,
+                "id": proveedor.id_proveedor,
+                "nombre": proveedor.nombre
+            })
+        return JsonResponse({"success": False, "errors": form.errors})
+    return JsonResponse({"success": False, "error": "Método no permitido"}, status=405)
+
+
+@never_cache
+@login_required
+@permission_required("core.add_insumos", raise_exception=True)
+def insumo_create_ajax(request):
+    if request.method == "POST":
+        form = InsumoForm(request.POST)
+        if form.is_valid():
+            insumo = form.save()
+            return JsonResponse({
+                "success": True,
+                "id": insumo.id_insumo,
+                "nombre": insumo.nombre
+            })
+        return JsonResponse({"success": False, "errors": form.errors})
+    return JsonResponse({"success": False, "error": "Método no permitido"}, status=405)

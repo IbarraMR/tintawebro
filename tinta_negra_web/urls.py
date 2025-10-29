@@ -1,8 +1,17 @@
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path
 from django.contrib.auth import views as auth_views
-from core import views
-from core.views import logout_view
+from tinta_negra_web import views
+from tinta_negra_web.views import (
+    logout_view,
+    cajas_list,
+    abrir_caja_view,
+    compras_create,
+    proveedor_create_ajax,
+    insumo_create_ajax,
+)
+
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -26,10 +35,18 @@ urlpatterns = [
     path('proveedores/<int:pk>/reactivar/', views.proveedor_reactivar, name='proveedor_reactivar'),
     path('proveedores/<int:pk>/compras/', views.compras_proveedor, name='compras_proveedor'),
 
+
     path('cajas/', views.cajas_list, name='cajas_list'),
     path('cajas/abrir/', views.abrir_caja_view, name='abrir_caja'),
     path('cajas/cerrar/', views.cerrar_caja_view, name='cerrar_caja'),
+    path('cajas/movimientos/', views.movimientos_list, name='movimientos_list'),
+    path('cajas/movimientos/nuevo/', views.movimiento_create, name='movimiento_create'),
+    path('cajas/formas-pago/', views.formas_pago_list, name='formas_pago_list'),
+    path('cajas/formas-pago/nuevo/', views.formas_pago_create, name='formas_pago_create'),
+    path('cajas/formas-pago/toggle/<int:id>/', views.formas_pago_toggle, name='formas_pago_toggle'),
     path('cajas/<int:id>/', views.detalle_caja_view, name='detalle_caja'),
+
+    
 
     path('pedidos/', views.pedidos_list, name='pedidos_list'),
     path('presupuestos/', views.presupuestos_list, name='presupuestos_list'),
@@ -45,7 +62,12 @@ urlpatterns = [
     path('empleados/<int:pk>/baja/', views.empleado_baja_logica, name='empleado_baja'),
     path('empleados/<int:pk>/reactivar/', views.empleado_reactivar, name='empleado_reactivar'),
 
+    path("compras/nueva/", compras_create, name="compras_create"),
+    path("ajax/proveedor/nuevo/", proveedor_create_ajax, name="proveedor_create_ajax"),
+    path("ajax/insumo/nuevo/", insumo_create_ajax, name="insumo_create_ajax"),
 
-    
+
+
+
 
 ]

@@ -1,0 +1,192 @@
+{% extends 'core/base.html' %}
+{% block title %}Movimientos de Caja{% endblock %}
+
+{% block content %}
+<div class="container mt-4 text-white">
+
+    <h2 class="mb-3">Historial de Movimientos de Caja</h2>
+
+    <!-- 🔎 FILTROS -->
+    <div class="d-flex justify-content-between mb-3">
+        <form method="GET" class="d-flex gap-2 mb-3">
+            <input type="text" name="q" class="form-control"
+                placeholder="Buscar por ID o descripción"
+                value="{{ filtro_busqueda }}">
+
+            <input type="date" name="desde" class="form-control"
+                value="{{ filtro_fecha_desde|default_if_none:'' }}">
+            <input type="date" name="hasta" class="form-control"
+                value="{{ filtro_fecha_hasta|default_if_none:'' }}">
+
+            <select name="forma_pago" class="form-select">
+                <option value="">Todos los métodos</option>
+                {% for fp in formas_pago %}
+                    <option value="{{ fp.id_forma }}"
+                        {% if filtro_forma_pago == fp.id_forma|stringformat:"s" %}selected{% endif %}>
+                        {{ fp.nombre }}
+                    </option>
+                {% endfor %}
+            </select>
+
+            <button class="btn btn-primary">Filtrar</button>
+        </form>
+
+        <!-- ➕ BOTÓN NUEVO MOVIMIENTO -->
+        <a href="#" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalMovimiento">
+            + Nuevo Movimiento
+        </a>
+    </div>
+
+    <!-- 🧾 TABLA DE MOVIMIENTOS -->
+    <table class="table table-dark table-striped mt-3" id="tablaMovimientos">
+        <thead>
+            <tr>
+                <th># Mov.</th>
+                <th>Fecha/Hora</th>
+                <th>Tipo</th>
+                <th>Monto ($)</th>
+                <th>Forma de Pago</th>
+                <th>Descripción</th>
+                <th>Caja #</th>
+                <th>Empleado</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for mov in movs %}
+            <tr>
+                <td>{{ mov.id }}</td>
+                <td>{{ mov.fecha_hora }}</td>
+                <td>{{ mov.get_tipo_display }}</td>
+                <td>${{ mov.monto }}</td>
+                <td>{{ mov.forma_pago.nombre }}</td>
+                <td>{{ mov.descripcion }}</td>
+                <td>{{ mov.caja.id_caja }}</td>
+                <td>{{ mov.creado_por.nombre }} {{ mov.creado_por.apellido }}</td>
+
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7" class="text-center text-secondary">No hay movimientos registrados.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- 📄 PAGINACIÓN -->
+    <nav aria-label="Paginación">
+        <ul class="pagination">
+            {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Anterior</a>
+                </li>
+            {% endif %}
+
+            <li class="page-item active">
+                <span class="page-link">{{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+            </li>
+
+            {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}">Siguiente</a>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+
+
+<!-- ✅ MODAL - NUEVO MOVIMIENTO -->
+<div class="modal fade" id="modalMovimiento" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-white">
+
+            <div class="modal-header">
+                <h4 class="modal-title">Registrar Movimiento de Caja</h4>
+                <button class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form method="POST" id="formNuevoMovimiento">
+                {% csrf_token %}
+                <div class="modal-body">
+
+                    <label>Tipo:</label>
+                    {{ form.tipo }}
+
+                    <label>Monto ($):</label>
+                    {{ form.monto }}
+
+                    <label>Forma de Pago:</label>
+                    {{ form.forma_pago }}
+
+                    <label>Descripción:</label>
+                    {{ form.descripcion }}
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button class="btn btn-success" type="submit">Guardar Movimiento</button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+
+<!-- ✅ SCRIPT AJAX PARA GUARDAR SIN RECARGAR -->
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const form = document.getElementById("formNuevoMovimiento");
+    const tabla = document.querySelector("#tablaMovimientos tbody");
+    const modalEl = document.getElementById("modalMovimiento");
+
+    form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        const formData = new FormData(form);
+
+        const response = await fetch("{% url 'movimiento_create' %}", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": form.querySelector("[name=csrfmiddlewaretoken]").value,
+            },
+            body: formData,
+        });
+
+        let data;
+        try {
+            data = await response.json();
+        } catch (e) {
+            console.error("Respuesta inválida del servidor", e);
+            alert("⚠️ Error inesperado en el servidor");
+            return;
+        }
+
+        if (!response.ok || data.error) {
+            alert("⚠️ " + (data.error || "No se pudo registrar el movimiento"));
+            return;
+        }
+
+        // ✅ Agregar nueva fila
+        const nuevaFila = `
+            <tr>
+                <td>${data.mov.id}</td>
+                <td>${data.mov.fecha_hora}</td>
+                <td>${data.mov.tipo}</td>
+                <td>$${data.mov.monto}</td>
+                <td>${data.mov.forma_pago || '-'}</td>
+                <td>${data.mov.descripcion}</td>
+                <td>${data.mov.caja}</td>
+            </tr>
+        `;
+        tabla.insertAdjacentHTML("afterbegin", nuevaFila);
+
+        // ✅ Cerrar modal y resetear formulario
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        modal.hide();
+        form.reset();
+    });
+});
+</script>
+
+{% endblock %}

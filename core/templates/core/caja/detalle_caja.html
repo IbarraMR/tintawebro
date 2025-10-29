@@ -6,6 +6,7 @@
     <p>Saldo inicial: ${{ caja.saldo_inicial }}</p>
     <p>Fecha apertura: {{ caja.fecha_hora_apertura }}</p>
     <p>Fecha cierre: {{ caja.fecha_hora_cierre|default:"-" }}</p>
+    <p><strong>Empleado:</strong> {{ caja.id_empleado.nombre }} {{ caja.id_empleado.apellido }}</p>
 
     <hr>
     <h4>Movimientos</h4>
