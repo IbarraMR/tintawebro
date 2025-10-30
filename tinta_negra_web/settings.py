@@ -39,7 +39,9 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.humanize',
     "django_extensions",
+    'tinta_negra_web',
     'core',
+    'widget_tweaks',
 ]
 
 MIDDLEWARE = [

@@ -1,0 +1,22 @@
+<div class="modal fade" id="proveedorModal" tabindex="-1" aria-labelledby="proveedorModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-white"> 
+            
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="proveedorModalLabel">Registrar Nuevo Proveedor</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            
+            <div class="modal-body">
+                     <form id="proveedorFormModal" method="post" action="{% url 'proveedor_create_ajax' %}">
+                        {% csrf_token %}
+                        {{ proveedor_form.as_p }} 
+                    </form>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary" id="btnGuardarProveedor">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>

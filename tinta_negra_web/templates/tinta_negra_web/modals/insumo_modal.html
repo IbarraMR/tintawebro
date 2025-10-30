@@ -1,0 +1,27 @@
+<div class="modal fade" id="insumoModal" tabindex="-1" aria-labelledby="insumoModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content bg-dark text-white">
+      
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title" id="insumoModalLabel">Registrar Nuevo Insumo</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      
+      <form id="insumoFormModal" method="post" action="{% url 'insumo_create_ajax' %}">
+      <div class="modal-body">
+          {% csrf_token %}
+          {{ insumo_form.as_p }} 
+      </div>
+      
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+
+        <button type="submit" id="btnGuardarInsumo" class="btn btn-primary">
+          Guardar
+        </button>
+      </div>
+      </form>
+
+    </div>
+  </div>
+</div>

@@ -28,7 +28,6 @@ h1, h2, h3, h4, h5, h6, .text-dark {
     color: var(--color-text-main) !important; /* Asegura que los títulos sean visibles */
 }
 
-/* Estilo para los botones (usamos una variante oscura/sutil) */
 .btn-custom {
     background-color: #333333; /* Gris oscuro para botones como Iniciar Sesión */
     border-color: #333333;
@@ -189,4 +188,33 @@ h1, h2, h3, h4, h5, h6, .text-dark {
 
 .table-custom tbody tr:hover {
     background-color: #1a1a1a;
+}
+
+.sidebar .nav-link {
+    color: #ccc;
+    transition: all 0.2s ease;
+    font-size: 0.95rem;
+    padding: 6px 8px;
+    border-radius: 4px;
+}
+
+.sidebar .nav-link:hover {
+    color: #fff;
+    background-color: #2b2b2b;
+    text-decoration: none;
+}
+
+.sidebar .nav-link.active {
+    background-color: #343a40;
+    color: #fff;
+}
+
+.btn-custom,
+.btn-outline-light {
+    border-radius: 6px;
+}
+
+.main-content {
+    padding: 20px;
+    min-height: 100vh;
 }

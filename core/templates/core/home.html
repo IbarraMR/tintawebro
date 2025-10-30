@@ -73,11 +73,14 @@
                     <i class="fas fa-cash-register fa-3x text-light me-3"></i>
                     <div>
                         <div class="text-uppercase text-secondary small">Caja Actual</div>
+
                         {% if caja_abierta %}
                             <h3 class="mb-0 text-success">Abierta</h3>
+                            <p class="text-info fw-bold mb-0 fs-5">💰 Saldo: ${{ saldo_actual|floatformat:2|intcomma }}</p>
                         {% else %}
                             <h3 class="mb-0 text-danger">Cerrada</h3>
                         {% endif %}
+
                     </div>
                 </div>
                 <a href="{% url 'cajas_list' %}" class="stretched-link small text-secondary mt-2 d-block">Ver detalles</a>
