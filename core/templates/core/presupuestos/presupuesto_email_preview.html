@@ -1,0 +1,50 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}Enviar presupuesto por email{% endblock %}
+
+{% block content %}
+
+<div class="container mt-4">
+
+    <h2 class="text-white">Enviar presupuesto por email</h2>
+    <p class="text-secondary">
+        Presupuesto Nº <strong>{{ presupuesto.id_presupuesto }}</strong> — Cliente: <strong>{{ cliente }}</strong>
+    </p>
+
+    <!-- FORM -->
+    <form method="post" class="card p-4" style="background:#1f1f1f; border:1px solid #333;">
+        {% csrf_token %}
+
+        <label class="text-white">Email destinatario</label>
+        <input type="email" name="email" class="form-control mb-3"
+               value="{{ cliente.email }}" required>
+
+        <label class="text-white">Mensaje</label>
+        <textarea name="mensaje" rows="7" class="form-control mb-3" required>
+Hola {{ cliente.nombre }},
+
+Te envío el presupuesto solicitado (adjunto en PDF).
+
+Total del presupuesto: ${{ presupuesto.total_presupuesto }}
+
+Quedo a disposición.
+Saludos!
+        </textarea>
+
+        <div class="alert alert-info">
+            📎 El PDF del presupuesto se adjuntará automáticamente.
+        </div>
+
+        <div class="d-flex justify-content-center gap-3 mt-3">
+            <button type="submit" class="btn btn-success">📧 Enviar Email</button>
+
+            <a href="{% url 'presupuesto_detalle' presupuesto.id_presupuesto %}" class="btn btn-secondary">
+                ❌ Cancelar
+            </a>
+        </div>
+    </form>
+
+</div>
+
+{% endblock %}

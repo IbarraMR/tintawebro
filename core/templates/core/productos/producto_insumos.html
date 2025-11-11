@@ -1,0 +1,37 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Insumos del producto{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="text-white">Insumos de {{ producto.nombre }}</h2>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <table class="table table-dark table-striped">
+            <thead>
+                <tr>
+                    <th>Insumo</th>
+                    <th>Cantidad utilizada</th>
+                    <th>Quitar</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ formset.management_form }}
+                {% for form in formset %}
+                <tr>
+                    <td>{{ form.insumo }}</td>
+                    <td>{{ form.cantidad }}</td>
+                    <td>{{ form.DELETE }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <button type="submit" class="btn btn-success">Guardar cambios</button>
+        <a href="{% url 'productos_list' %}" class="btn btn-secondary">Volver</a>
+    </form>
+</div>
+{% endblock %}

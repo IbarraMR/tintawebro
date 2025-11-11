@@ -4,6 +4,7 @@
 {% block title %}Registrar Proveedor{% endblock %}
 
 {% block content %}
+    {% include "core/partials/toasts.html" %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="text-white">Registrar Nuevo Proveedor</h2>
     <a href="{% url 'proveedores_list' %}" class="btn btn-secondary">

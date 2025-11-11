@@ -10,13 +10,24 @@ from .models import (
     MovimientosCaja,
     Compras,
     DetallesCompra,
-    Insumos
+    Insumos,
+    UnidadMedida,
+    ProductosInsumos,
+    Presupuestos,
+    ConfiguracionEmpresa,
+    ConfiguracionEmail,
+    
+
 )
 from django.forms.models import inlineformset_factory
 
 # ==========================================================
 # FORM CLIENTE
 # ==========================================================
+from django import forms
+from django.core.exceptions import ValidationError
+from core.models import Cliente
+
 class ClienteForm(forms.ModelForm):
     class Meta:
         model = Cliente
@@ -30,6 +41,24 @@ class ClienteForm(forms.ModelForm):
             'direccion': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Dirección completa'}),
         }
 
+    def clean(self):
+        cleaned_data = super().clean()
+
+        dni = cleaned_data.get("dni")
+        email = cleaned_data.get("email")
+        telefono = cleaned_data.get("telefono")
+        qs = Cliente.objects.exclude(pk=self.instance.pk)
+
+        if dni and qs.filter(dni=dni).exists():
+            raise ValidationError({"dni": "⚠️ Ya existe un cliente con este DNI."})
+
+        if email and qs.filter(email=email).exists():
+            raise ValidationError({"email": "⚠️ Ya existe un cliente con este email."})
+
+        if telefono and qs.filter(telefono=telefono).exists():
+            raise ValidationError({"telefono": "⚠️ Ya existe un cliente con este teléfono."})
+
+        return cleaned_data
 
 # ==========================================================
 # FORM PROVEEDOR
@@ -123,19 +152,39 @@ class FormaPagoForm(forms.ModelForm):
 # ==========================================================
 # FORM INSUMOS
 # ==========================================================
+
 class InsumoForm(forms.ModelForm):
+    unidad_medida = forms.ModelChoiceField(
+        queryset=UnidadMedida.objects.all(),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label="Unidad de medida"
+    )
+
     class Meta:
         model = Insumos
-        fields = ['proveedor', 'nombre', 'descripcion', 'unidad_medida', 'stock_actual', 'stock_minimo', 'precio_costo_unitario']
+        fields = [
+            'proveedor', 'nombre', 'descripcion',
+            'unidad_medida', 'factor_conversion',
+            'stock_actual', 'stock_minimo',
+            'precio_costo_unitario'
+        ]
         widgets = {
             'proveedor': forms.Select(attrs={'class': 'form-select'}),
             'nombre': forms.TextInput(attrs={'class': 'form-control'}),
             'descripcion': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
-            'unidad_medida': forms.TextInput(attrs={'class': 'form-control'}),
-            'stock_actual': forms.NumberInput(attrs={'class': 'form-control'}),
+            'factor_conversion': forms.NumberInput(attrs={'class': 'form-control', 'value': 1}),
+            'stock_actual': forms.NumberInput(attrs={'class': 'form-control', 'value': 0}),
             'stock_minimo': forms.NumberInput(attrs={'class': 'form-control'}),
             'precio_costo_unitario': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
         }
+
+    def clean_nombre(self):
+        nombre = self.cleaned_data["nombre"].strip()
+        if Insumos.objects.filter(nombre__iexact=nombre).exclude(pk=self.instance.pk).exists():
+            raise forms.ValidationError("⚠ Ya existe un insumo con ese nombre.")
+        return nombre
+
+        
 
 class DetallesCompraForm(forms.ModelForm):
     precio_unitario = forms.DecimalField(
@@ -190,3 +239,61 @@ DetallesCompraFormSet = inlineformset_factory(
     extra=1, 
     can_delete=True
 )
+
+
+
+class ProductoInsumoForm(forms.ModelForm):
+    class Meta:
+        model = ProductosInsumos
+        fields = ["insumo", "cantidad"]
+        widgets = {
+            "cantidad": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+        }
+
+class PresupuestoForm(forms.ModelForm):
+    class Meta:
+        model = Presupuestos
+        fields = [
+            "id_cliente",
+            "fecha_emision",
+            "fecha_vencimiento",
+            "trabajo",
+            "descripcion",
+            "costo_diseno",
+            "margen_ganancia",
+        ]
+        widgets = {
+            "id_cliente": forms.Select(attrs={"class": "form-select"}),
+            "trabajo": forms.TextInput(attrs={"class": "form-control", "placeholder": "Ej: Cuadernos A5 personalizados"}),
+            "fecha_emision": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+            "fecha_vencimiento": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+            "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "costo_diseno": forms.NumberInput(attrs={"class": "form-control", "min": 0, "step": "0.01"}),
+            "margen_ganancia": forms.NumberInput(attrs={"class": "form-control", "min": 0, "max": 100, "step": "0.01"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["id_cliente"].queryset = Cliente.objects.order_by("apellido", "nombre")
+
+
+class ConfiguracionEmpresaForm(forms.ModelForm):
+    class Meta:
+        model = ConfiguracionEmpresa
+        fields = "__all__"
+        widgets = {
+            "condiciones_pago": forms.Textarea(attrs={"rows": 3}),
+            "otros_detalles": forms.Textarea(attrs={"rows": 3}),
+        }
+
+class ConfiguracionEmailForm(forms.ModelForm):
+    class Meta:
+        model = ConfiguracionEmail
+        fields = "__all__"
+        widgets = {
+            "email_remitente": forms.EmailInput(attrs={"class": "form-control"}),
+            "contraseña_app": forms.PasswordInput(attrs={"class": "form-control"}),
+            "smtp_host": forms.TextInput(attrs={"class": "form-control"}),
+            "smtp_port": forms.NumberInput(attrs={"class": "form-control"}),
+            "usar_tls": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }

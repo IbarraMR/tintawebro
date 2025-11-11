@@ -1,5 +1,4 @@
 import json
-
 from django import forms
 from django.contrib import messages
 from django.contrib.auth import logout
@@ -13,17 +12,34 @@ from django.http import JsonResponse, HttpResponseBadRequest
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 from django.forms import modelformset_factory, inlineformset_factory
 from django.db.models import Sum
+from decimal import Decimal
+from datetime import date
+from django.views.decorators.csrf import csrf_exempt
+from django.template.loader import render_to_string, get_template
+from django.http import HttpResponse
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from django.core.mail import EmailMessage
+from io import BytesIO
+from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
+from xhtml2pdf import pisa
 from core.forms import (
     ClienteForm, ComprasForm, DetallesCompraFormSet, EmpleadoForm, 
-    FormaPagoForm, InsumoForm, MovimientoCajaForm, ProveedorForm
+    FormaPagoForm, InsumoForm, MovimientoCajaForm, ProveedorForm, 
+    PresupuestoForm, ProductoInsumoForm, ConfiguracionEmpresaForm, ConfiguracionEmailForm,
 )
 from core.models import (
     AuditoriaCaja, Cajas, Cliente, Compras, DetallesCompra, Empleados, 
     EstadosPedidos, FormaPago, Insumos, MovimientosCaja, Pedidos, 
-    PedidosInsumos, Presupuestos, PresupuestosInsumos, Proveedores, 
+    PedidosInsumos, Presupuestos, PresupuestosInsumos,UnidadMedida, Proveedores,
+    StockMovimientos, Productos, ProductosInsumos,ConfiguracionEmpresa, ConfiguracionEmail,
+    PresupuestosProductos, Trabajo, TrabajoInsumo,
     Proveedores as Proveedor
 ) 
 from core.utils_caja import registrar_movimiento
@@ -58,16 +74,14 @@ def register_user(request):
 @login_required
 def home(request):
 
-    # ✅ Obtener la última caja abierta
-    caja = Cajas.objects.filter(caja_cerrada=False).order_by('-id_caja').first()
+    ultima_caja = Cajas.objects.order_by("-id_caja").first()
 
-    saldo_actual = None
     caja_abierta = False
+    saldo_actual = None
 
-    if caja:
-        caja_abierta = True
-        # Usamos el saldo que guardás en tu modelo Cajas
-        saldo_actual = caja.saldo_sistema
+    if ultima_caja:
+        caja_abierta = not ultima_caja.caja_cerrada
+        saldo_actual = ultima_caja.saldo_sistema if caja_abierta else ultima_caja.saldo_final
 
     es_duenio = request.user.groups.filter(name='Jefe').exists()
     es_empleado = request.user.groups.filter(name='Empleados').exists()
@@ -78,38 +92,52 @@ def home(request):
         'insumos_criticos_count': 0,
         'clientes_total_count': Cliente.objects.count(),
 
-        # 🔥 Nuevos valores que necesita el template
-        'caja': caja,
-        'saldo_actual': saldo_actual,
+        'caja': ultima_caja,
         'caja_abierta': caja_abierta,
+        'saldo_actual': saldo_actual,
 
         'es_duenio': es_duenio,
         'es_empleado': es_empleado,
         'puede_ver_caja': es_duenio or es_empleado,
     }
+
     if es_empleado:
         return render(request, 'core/home_empleado.html', context)
 
     return render(request, 'core/home.html', context)
 
 
+
 # ----------------------------------------------------------------------
 # CLIENTES
 # ----------------------------------------------------------------------
+from django.core.paginator import Paginator
+
 @never_cache
 @login_required
 @permission_required('core.view_cliente', raise_exception=True)
 def clientes_list(request):
-    query = request.GET.get('q', '')
-    clientes = Cliente.objects.all().order_by('nombre')
+    query = request.GET.get('q', '').strip()
+
+    clientes_qs = Cliente.objects.all().order_by('nombre')
+
     if query:
-        clientes = clientes.filter(
+        clientes_qs = clientes_qs.filter(
             Q(nombre__icontains=query) |
             Q(apellido__icontains=query) |
             Q(dni__icontains=query) |
             Q(telefono__icontains=query)
         )
-    return render(request, 'core/clientes/clientes_list.html', {'clientes': clientes, 'query': query})
+
+    paginator = Paginator(clientes_qs, 15)
+    page_number = request.GET.get("page")
+    clientes = paginator.get_page(page_number)
+
+    return render(request, 'core/clientes/clientes_list.html', {
+        'clientes': clientes,  
+        'query': query,
+        'page_obj': clientes,  
+    })
 
 @never_cache
 @login_required
@@ -120,7 +148,8 @@ def cliente_create(request):
         if form.is_valid():
             try:
                 form.save()
-                messages.success(request, 'Cliente registrado exitosamente.')
+                messages.success(request, 'Cliente registrado exitosamente.', extra_tags="cliente")
+                list(messages.get_messages(request))
                 return redirect('clientes_list')
             except Exception as e:
                 messages.error(request, f'Error al guardar el cliente: {e}.')
@@ -141,15 +170,21 @@ def cliente_edit(request, pk):
         form = ClienteForm(request.POST, instance=cliente)
         if form.is_valid():
             form.save()
-            messages.success(request, 'Cliente actualizado exitosamente.')
+            messages.success(request, 'Cliente actualizado exitosamente.', extra_tags="cliente")
+            list(messages.get_messages(request))
             return redirect('clientes_list')
         else:
             messages.error(request, 'Error al actualizar el cliente. Verifique los datos.')
+            list(messages.get_messages(request))  
     else:
         form = ClienteForm(instance=cliente)
     return render(request, 'core/clientes/cliente_form.html', {
-        'form': form, 'title': f'Editar Cliente: {cliente.nombre}', 'is_create': False
+        'form': form,
+        'cliente': cliente,                  
+        'title': f'Editar Cliente: {cliente.nombre}',
+        'is_create': False                    
     })
+
 
 @never_cache
 @login_required
@@ -159,8 +194,9 @@ def cliente_delete(request, pk):
 
     if request.method == 'POST':
         try:
-            cliente.delete()  # Si tiene Pedidos/Presupuestos vinculados (PROTECT), lanzará ProtectedError
-            messages.success(request, 'Cliente eliminado correctamente.')
+            cliente.delete()  
+            messages.success(request, 'Cliente eliminado correctamente.', extra_tags="cliente")
+            list(messages.get_messages(request))
         except ProtectedError:
             messages.error(
                 request,
@@ -173,22 +209,33 @@ def cliente_delete(request, pk):
 # ----------------------------------------------------------------------
 # PROVEEDORES
 # ----------------------------------------------------------------------
+from django.core.paginator import Paginator
+
 @never_cache
 @login_required
 @permission_required('core.view_proveedores', raise_exception=True)
 def proveedores_list(request):
-    query = request.GET.get('q', '')
-    proveedores = Proveedor.objects.all().order_by('nombre')
+    query = request.GET.get('q', '').strip()
+
+    proveedores_qs = Proveedor.objects.all().order_by('nombre')
+
     if query:
-        proveedores = proveedores.filter(
+        proveedores_qs = proveedores_qs.filter(
             Q(nombre__icontains=query) |
             Q(razon_social__icontains=query) |
             Q(cuit__icontains=query) |
             Q(telefono__icontains=query)
         )
+    paginator = Paginator(proveedores_qs, 15)
+    page_number = request.GET.get("page")
+    proveedores = paginator.get_page(page_number)
+
     return render(request, 'core/proveedores/proveedores_list.html', {
-        'proveedores': proveedores, 'query': query
+        'proveedores': proveedores,  
+        'query': query,
+        'page_obj': proveedores,      
     })
+
 
 @never_cache
 @login_required
@@ -198,7 +245,8 @@ def proveedor_create(request):
         form = ProveedorForm(request.POST)
         if form.is_valid():
             form.save()
-            messages.success(request, 'Proveedor registrado exitosamente.')
+            messages.success(request, 'Proveedor registrado exitosamente.', extra_tags="proveedor")
+            list(messages.get_messages(request))
             return redirect('proveedores_list')
         else:
             messages.error(request, 'Error al registrar el proveedor. Verifica los datos.')
@@ -217,7 +265,8 @@ def proveedor_edit(request, pk):
         form = ProveedorForm(request.POST, instance=proveedor)
         if form.is_valid():
             form.save()
-            messages.success(request, 'Proveedor actualizado exitosamente.')
+            messages.success(request, 'Proveedor actualizado exitosamente.', extra_tags="proveedor")
+            list(messages.get_messages(request))
             return redirect('proveedores_list')
         else:
             messages.error(request, 'Error al actualizar el proveedor. Verifica los datos.')
@@ -235,11 +284,13 @@ def proveedor_baja_logica(request, pk):
     proveedor = get_object_or_404(Proveedor, pk=pk)
     if hasattr(proveedor, 'compras') and proveedor.compras.exists():
         messages.error(request, 'No se puede dar de baja este proveedor porque tiene compras asociadas.')
+        list(messages.get_messages(request))
         return redirect('proveedores_list')
 
     proveedor.is_active = False
     proveedor.save()
-    messages.success(request, f'Proveedor {proveedor.razon_social} dado de baja exitosamente.')
+    messages.success(request, f'Proveedor {proveedor.razon_social} dado de baja exitosamente.', extra_tags="proveedor")
+    list(messages.get_messages(request))
     return redirect('proveedores_list')
 
 @never_cache
@@ -249,7 +300,8 @@ def proveedor_reactivar(request, pk):
     proveedor = get_object_or_404(Proveedor, pk=pk)
     proveedor.is_active = True
     proveedor.save()
-    messages.success(request, f'Proveedor {proveedor.razon_social} reactivado exitosamente.')
+    messages.success(request, f'Proveedor {proveedor.razon_social} reactivado exitosamente.', extra_tags="proveedor")
+    list(messages.get_messages(request))
     return redirect('proveedores_list')
 
 # ----------------------------------------------------------------------
@@ -259,8 +311,14 @@ def proveedor_reactivar(request, pk):
 @login_required
 @permission_required('core.view_insumos', raise_exception=True)
 def insumos_list(request):
-    insumos = Insumos.objects.all().order_by('nombre')
-    return render(request, 'core/insumos/insumos_list.html', {'insumos': insumos})
+
+    lista_insumos = Insumos.objects.all().order_by('nombre')
+    paginator = Paginator(lista_insumos, 15)
+    page_number = request.GET.get("page")
+    insumos = paginator.get_page(page_number)
+    return render(request, 'core/insumos/insumos_list.html', {
+        'insumos': insumos
+    })
 
 @never_cache
 @login_required
@@ -284,8 +342,7 @@ def insumo_create(request):
         form = InsumoForm(request.POST)
         if form.is_valid():
             insumo = form.save()
-            return redirect("compras_create")  # vuelve a la pantalla de compras
-
+            return redirect("insumos_list") 
     else:
         form = InsumoForm()
 
@@ -301,7 +358,8 @@ def insumo_edit(request, pk):
         form = InsumoForm(request.POST, instance=insumo)
         if form.is_valid():
             form.save()
-            messages.success(request, 'Insumo actualizado exitosamente.')
+            messages.success(request, 'Insumo actualizado exitosamente.', extra_tags="insumo")
+            list(messages.get_messages(request))
             return redirect('insumos_list')
         else:
             messages.error(request, 'Error al actualizar el insumo.')
@@ -317,56 +375,60 @@ def insumo_edit(request, pk):
 @login_required
 @transaction.atomic
 def compras_create(request):
-    try:
-        cajas_abiertas = Cajas.objects.filter(caja_cerrada=False).order_by('-id_caja')
-        
-        if cajas_abiertas.exists():
-            caja_abierta = cajas_abiertas.first() 
-        else:
-            raise Cajas.DoesNotExist
 
+    try:
+        caja_abierta = Cajas.objects.filter(caja_cerrada=False).latest("id_caja")
     except Cajas.DoesNotExist:
-        messages.error(request, "ERROR: No hay ninguna caja abierta. No se puede registrar la compra.")
-        return redirect('tu_url_de_inicio_o_dashboard')
+        messages.error(request, "❌ No hay ninguna caja abierta. No se puede registrar la compra.")
+        list(messages.get_messages(request))
+        return redirect('home')
 
     if request.method == 'POST':
         form = ComprasForm(request.POST)
         formset = DetallesCompraFormSet(request.POST, instance=Compras())
-        
+
         try:
             empleado_actual = Empleados.objects.get(user=request.user)
         except Empleados.DoesNotExist:
-             messages.error(request, "Usuario no vinculado a un empleado.")
-             return redirect('tu_url_de_inicio_o_dashboard')
+            messages.error(request, "❌ Tu usuario no está vinculado con un empleado.")
+            return redirect('home')
 
         if form.is_valid() and formset.is_valid():
             total_compra = 0
-            
+
             for detalle_form in formset:
-                if detalle_form.cleaned_data.get('DELETE'):
-                    continue
-                
-                cantidad = detalle_form.cleaned_data.get('cantidad')
-                precio_unitario = detalle_form.cleaned_data.get('precio_unitario')
-                
+                insumo = detalle_form.cleaned_data.get("insumo")
+                cantidad = detalle_form.cleaned_data.get("cantidad")
+                precio_unitario = detalle_form.cleaned_data.get("precio_unitario")
+
+                if not insumo or detalle_form.cleaned_data.get("DELETE"):
+                    continue  
                 if cantidad and precio_unitario:
-                    total_compra += (cantidad * precio_unitario)
+                    total_compra += cantidad * precio_unitario
 
             if caja_abierta.saldo_sistema < total_compra:
-                 messages.error(request, f"Saldo insuficiente en caja. Saldo actual: ${caja_abierta.saldo_sistema:.2f}. Total compra: ${total_compra:.2f}.")
-                 return redirect('compras_create') 
+                messages.error(
+                    request,
+                    f"❌ Saldo insuficiente en caja. Saldo actual: ${caja_abierta.saldo_sistema:.2f} — Total compra: ${total_compra:.2f}"
+                )
+                list(messages.get_messages(request))
+                return redirect('compras_create')
+
             compra = form.save(commit=False)
             compra.total = total_compra
             compra.save()
+
             for detalle_form in formset:
-                if detalle_form.cleaned_data.get('DELETE'):
-                    continue
-                
+                insumo = detalle_form.cleaned_data.get("insumo")
+                cantidad = detalle_form.cleaned_data.get("cantidad")
+
+                if not insumo or detalle_form.cleaned_data.get("DELETE"):
+                    continue  
+
                 detalle = detalle_form.save(commit=False)
                 detalle.compra = compra
                 detalle.save()
-                insumo = detalle.insumo
-                insumo.stock_actual = (insumo.stock_actual or 0) + detalle.cantidad
+                insumo.stock_actual = (insumo.stock_actual or 0) + cantidad
                 insumo.save()
 
             MovimientosCaja.objects.create(
@@ -378,37 +440,45 @@ def compras_create(request):
                 origen=MovimientosCaja.Origen.COMPRA,
                 referencia_id=compra.id_compra,
                 creado_por=empleado_actual,
-                saldo_resultante=caja_abierta.saldo_sistema - total_compra # El saldo_sistema se actualiza automáticamente con MovimientosCaja
+                saldo_resultante=caja_abierta.saldo_sistema - total_compra
             )
 
-            messages.success(request, f"Compra #{compra.id_compra} registrada y stock actualizado.")
-            return redirect('compras_list') 
+            messages.success(request, f"✅ Compra #{compra.id_compra} registrada correctamente.", extra_tags="compra")
+            list(messages.get_messages(request))
+            return redirect('compras_list')
 
     else:
-        # GET Request
         form = ComprasForm(initial={'fecha': timezone.now().date()})
         formset = DetallesCompraFormSet(instance=Compras())
 
     precios_insumos = {
-    str(insumo.id_insumo): str(insumo.precio_costo_unitario or 0) 
-    for insumo in Insumos.objects.all()
-}
-    
+        str(insumo.id_insumo): str(insumo.precio_costo_unitario or 0)
+        for insumo in Insumos.objects.all()
+    }
+
     context = {
         'form': form,
         'formset': formset,
-        'caja_abierta': caja_abierta, 
-        'proveedor_form': ProveedorForm(), 
+        'caja_abierta': caja_abierta,
+        'proveedor_form': ProveedorForm(),
         'insumo_form': InsumoForm(),
         'insumo_precios_json': json.dumps(precios_insumos),
     }
+
     return render(request, 'tinta_negra_web/compras_form.html', context)
+
 
 @never_cache
 @login_required
 def compras_list(request):
-    compras = Compras.objects.all().order_by('-fecha')
-    
+    storage = messages.get_messages(request)
+    for _ in storage:
+        pass
+    lista_compras = Compras.objects.all().order_by('-fecha')
+    paginator = Paginator(lista_compras, 10)
+    page_number = request.GET.get("page")
+    compras = paginator.get_page(page_number)
+
     context = {
         'compras': compras
     }
@@ -434,7 +504,8 @@ def insumo_delete(request, pk):
     insumo = get_object_or_404(Insumos, id_insumo=pk)
     if request.method == 'POST':
         insumo.delete()
-        messages.success(request, 'Insumo eliminado exitosamente.')
+        messages.success(request, 'Insumo eliminado exitosamente.', extra_tags="insumo")
+        list(messages.get_messages(request))
         return redirect('insumos_list')
 
     return redirect('insumos_list')
@@ -448,7 +519,6 @@ def insumo_datos_ajax(request, pk):
     return JsonResponse({
         "id": insumo.id_insumo,
         "nombre": insumo.nombre,
-        # Se usa str() para asegurar formato serializable para decimales
         "precio": str(insumo.precio_costo_unitario or "0.00"), 
         "unidad": insumo.unidad_medida,
     })
@@ -463,8 +533,6 @@ def insumo_editar_ajax(request):
 
     insumo_id = request.POST.get("id_insumo")
     insumo = get_object_or_404(Insumos, id_insumo=insumo_id)
-
-    # actualizar campos
     insumo.nombre = request.POST.get("nombre") or insumo.nombre
     insumo.descripcion = request.POST.get("descripcion") or insumo.descripcion
     insumo.unidad_medida = request.POST.get("unidad_medida") or insumo.unidad_medida
@@ -476,7 +544,6 @@ def insumo_editar_ajax(request):
 
     prov_id = request.POST.get("proveedor")
     if prov_id:
-        # Se asume que Proveedores tiene el campo id_proveedor como pk, si no, usar pk=prov_id
         insumo.proveedor = get_object_or_404(Proveedores, pk=prov_id) 
 
     insumo.save()
@@ -513,6 +580,28 @@ def insumo_nuevo_ajax(request):
         "precio_costo_unitario": str(insumo.precio_costo_unitario or "0.00"),
     })
 
+def agregar_insumo_presupuesto(request, presupuesto_id):
+    if request.method == "POST":
+        presupuesto = get_object_or_404(Presupuestos, id_presupuesto=presupuesto_id)
+        insumo = get_object_or_404(Insumos, id_insumo=request.POST["insumo_id"])
+        cantidad_usada = Decimal(request.POST["cantidad_usada"])
+        cantidad_real = cantidad_usada / Decimal(insumo.factor_conversion)
+        subtotal = cantidad_real * insumo.precio_costo_unitario
+        PresupuestosInsumos.objects.create(
+            presupuesto=presupuesto,
+            id_insumo=insumo,
+            cantidad=cantidad_real,               
+            precio_unitario=insumo.precio_costo_unitario,
+        )
+        presupuesto.subtotal = (presupuesto.subtotal or Decimal(0)) + subtotal
+        if presupuesto.margen_ganancia:
+            presupuesto.total_presupuesto = presupuesto.subtotal + (presupuesto.subtotal * presupuesto.margen_ganancia / 100)
+        else:
+            presupuesto.total_presupuesto = presupuesto.subtotal
+        presupuesto.save()
+        return JsonResponse({"success": True})
+    return JsonResponse({"success": False})
+
 # ----------------------------------------------------------------------
 # CAJAS
 # ----------------------------------------------------------------------
@@ -520,16 +609,25 @@ def insumo_nuevo_ajax(request):
 @login_required
 def cajas_list(request):
     empleado = Empleados.objects.filter(user=request.user).first()
+
     caja = None
+    lista_cajas = Cajas.objects.none()  # default
+
     if empleado:
         caja = Cajas.objects.filter(id_empleado=empleado, caja_cerrada=False).order_by('-id_caja').first()
-        cajas = Cajas.objects.filter(id_empleado=empleado).order_by('-id_caja')[:50]
-    else:
-        cajas = Cajas.objects.none()
+        lista_cajas = Cajas.objects.filter(id_empleado=empleado).order_by('-id_caja')
+    paginator = Paginator(lista_cajas, 15)
+    page_number = request.GET.get("page")
+    cajas = paginator.get_page(page_number)
+
+    cierre_info = request.session.pop("cierre_info", None)
+    list(messages.get_messages(request))
 
     return render(request, 'core/caja/cajas_list.html', {
         'caja': caja,
-        'cajas': cajas,
+        'cajas': cajas,         
+        'cierre_info': cierre_info,
+        'page_obj': cajas,      
     })
 
 @never_cache
@@ -543,19 +641,16 @@ def abrir_caja_view(request):
         messages.error(request, "No tenés un Empleado asociado a tu usuario.")
         return redirect('empleados_list')
 
-    ya_abierta = Cajas.objects.filter(id_empleado=empleado, caja_cerrada=False).exists()
-    if ya_abierta:
+    ultima_caja = Cajas.objects.filter(id_empleado=empleado).order_by('-id_caja').first()
+
+    if ultima_caja and not ultima_caja.caja_cerrada:
         messages.warning(request, "Ya tenés una caja abierta.")
         return redirect('cajas_list')
 
-    if request.method == 'POST':
-        saldo_inicial_raw = request.POST.get('saldo_inicial', '0')
-        try:
-            saldo_inicial = float(saldo_inicial_raw or 0)
-        except ValueError:
-            messages.error(request, "Saldo inicial inválido.")
-            return redirect('cajas_list')
+    # Determinar saldo inicial automático si hay una caja anterior
+    saldo_inicial = ultima_caja.saldo_final if ultima_caja else 0
 
+    if request.method == 'POST':
         caja = Cajas.objects.create(
             id_empleado=empleado,
             saldo_inicial=saldo_inicial,
@@ -563,7 +658,7 @@ def abrir_caja_view(request):
             fecha_hora_apertura=timezone.now(),
             diferencia=0,
             tolerancia=100,
-            descripcion="Apertura de caja",
+            descripcion="Apertura automática con saldo del cierre anterior",
             caja_cerrada=False
         )
 
@@ -573,10 +668,15 @@ def abrir_caja_view(request):
             accion=AuditoriaCaja.Accion.ABRIR if hasattr(AuditoriaCaja, 'Accion') else "ABRIR",
             detalle=f"Apertura con saldo inicial ${saldo_inicial:,.2f}"
         )
-        messages.success(request, "Caja abierta correctamente.")
+
+        messages.success(request, f"Caja abierta automáticamente con saldo inicial: ${saldo_inicial:,.2f}", extra_tags="caja")
+        list(messages.get_messages(request))
         return redirect('cajas_list')
 
-    return render(request, 'core/caja/abrir_caja_modal.html')
+    return render(request, 'core/caja/abrir_caja_modal.html', {
+        "saldo_inicial": saldo_inicial
+    })
+
 
 @never_cache
 @login_required
@@ -584,52 +684,42 @@ def abrir_caja_view(request):
 @transaction.atomic
 @require_http_methods(["GET", "POST"])
 def cerrar_caja_view(request):
+    from decimal import Decimal, ROUND_HALF_UP
+
     empleado = Empleados.objects.filter(user=request.user).first()
     if not empleado:
         messages.error(request, "No tenés un Empleado asociado a tu usuario.")
         return redirect('empleados_list')
-
     caja = Cajas.objects.filter(id_empleado=empleado, caja_cerrada=False).order_by('-id_caja').first()
+
     if not caja:
         messages.warning(request, "No hay ninguna caja abierta.")
         return redirect('cajas_list')
 
     if request.method == 'POST':
-        try:
-            monto_fisico = float(request.POST.get('monto_fisico', '0') or 0)
-        except ValueError:
-            messages.error(request, "Monto físico inválido.")
-            return redirect('cajas_list')
-
-        saldo_sistema = float(getattr(caja, 'saldo_sistema', caja.saldo_final))
-        diferencia = round(monto_fisico - saldo_sistema, 2)
-
+        monto_fisico = Decimal(request.POST.get('monto_fisico') or "0")
+        saldo_sistema = Decimal(str(caja.saldo_sistema))  
+        diferencia = (monto_fisico - saldo_sistema).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         caja.monto_fisico = monto_fisico
+        caja.saldo_final = monto_fisico
         caja.diferencia = diferencia
-        caja.saldo_final = saldo_sistema
         caja.fecha_hora_cierre = timezone.now()
         caja.caja_cerrada = True
         caja.save()
-
-        AuditoriaCaja.objects.create(
-            caja=caja,
-            usuario=request.user,
-            accion=AuditoriaCaja.Accion.CERRAR if hasattr(AuditoriaCaja, 'Accion') else "CERRAR",
-            detalle=f"Cierre: sistema ${saldo_sistema:,.2f}, físico ${monto_fisico:,.2f}, dif ${diferencia:,.2f}"
-        )
-
-        request.session['cierre_info'] = {
-            'sistema': f"{saldo_sistema:,.2f}",
-            'fisico': f"{monto_fisico:,.2f}",
-            'dif': f"{diferencia:,.2f}",
-            'dentro_tol': abs(diferencia) <= float(getattr(caja, 'tolerancia', 0)),
+        request.session["cierre_info"] = {
+            "saldo_inicial": f"{caja.saldo_inicial:,.2f}",
+            "saldo_final": f"{caja.saldo_final:,.2f}",
+            "diferencia": f"{caja.diferencia:,.2f}",
         }
-        messages.success(request, "Caja cerrada correctamente.")
-        return redirect('cajas_list')
 
-    return render(request, 'core/caja/cerrar_caja_modal.html', {
-        'saldo_sistema': getattr(caja, 'saldo_sistema', caja.saldo_final)
+        return redirect("cajas_list")
+
+    return render(request, "core/caja/cerrar_caja_modal.html", {
+        "saldo_sistema": caja.saldo_sistema
     })
+
+
+
 
 @never_cache
 @login_required
@@ -641,43 +731,6 @@ def detalle_caja_view(request, id):
 # ----------------------------------------------------------------------
 # MOVIMIENTOS CAJA
 # ----------------------------------------------------------------------
-@never_cache
-@login_required
-@permission_required('core.view_movimientoscaja', raise_exception=True)
-def movimientos_list(request):
-    q = request.GET.get("q", "")
-    desde = request.GET.get("desde")
-    hasta = request.GET.get("hasta")
-    forma_pago = request.GET.get("forma_pago")
-
-    movs = MovimientosCaja.objects.all().order_by("-fecha_hora")
-    if q:
-        movs = movs.filter(Q(descripcion__icontains=q))
-
-    if desde:
-        movs = movs.filter(fecha_hora__date__gte=desde)
-    if hasta:
-        movs = movs.filter(fecha_hora__date__lte=hasta)
-    if forma_pago:
-        movs = movs.filter(forma_pago__id_forma=forma_pago)
-
-    paginator = Paginator(movs, 20)
-    page_number = request.GET.get("page")
-    page_obj = paginator.get_page(page_number)
-
-    formas_pago = FormaPago.objects.all()
-    form = MovimientoCajaForm()
-
-    return render(request, "core/caja/movimientos_list.html", {
-        "movs": page_obj,
-        "page_obj": page_obj,
-        "form": form,
-        "formas_pago": formas_pago,
-        "filtro_busqueda": q,
-        "filtro_fecha_desde": desde,
-        "filtro_fecha_hasta": hasta,
-        "filtro_forma_pago": forma_pago,
-    })
 
 @never_cache
 @login_required
@@ -737,9 +790,10 @@ def formas_pago_create(request):
         form = FormaPagoForm(request.POST)
         if form.is_valid():
             form.save()
-            messages.success(request, "✅ Forma de pago agregada correctamente.")
+            messages.success(request, "✅ Forma de pago agregada correctamente.", extra_tags="formapago")
         else:
             messages.error(request, "❌ Error al agregar la forma de pago.")
+    list(messages.get_messages(request))
     return redirect("formas_pago_list")
 
 @never_cache
@@ -817,6 +871,7 @@ def empleado_create(request):
                 request,
                 f'Empleado registrado. Usuario: {nombre_usuario} (contraseña: {password_temporal})'
             )
+            list(messages.get_messages(request))
             return redirect('empleados_list')
         else:
             messages.error(request, 'Error al registrar el empleado. Verifica los datos.')
@@ -837,7 +892,8 @@ def empleado_edit(request, pk):
         form = EmpleadoForm(request.POST, instance=empleado)
         if form.is_valid():
             form.save()
-            messages.success(request, 'Empleado actualizado exitosamente.')
+            messages.success(request, 'Empleado actualizado exitosamente.', extra_tags="empleado")
+            list(messages.get_messages(request))
             return redirect('empleados_list')
         else:
             messages.error(request, 'Error al actualizar el empleado.')
@@ -857,7 +913,8 @@ def empleado_delete(request, pk):
         messages.error(request, f"No se puede eliminar a {empleado.nombre} {empleado.apellido} porque tiene cajas registradas.")
         return redirect('empleados_list')
     empleado.delete()
-    messages.success(request, f"El empleado {empleado.nombre} {empleado.apellido} fue eliminado correctamente.")
+    messages.success(request, f"El empleado {empleado.nombre} {empleado.apellido} fue eliminado correctamente.", extra_tags="empleado")
+    list(messages.get_messages(request))
     return redirect('empleados_list')
 
 @never_cache
@@ -880,11 +937,12 @@ def empleado_reactivar(request, pk):
     empleado = get_object_or_404(Empleados, pk=pk)
     empleado.is_active = True
     empleado.save()
-    messages.success(request, f"Empleado {empleado.nombre} {empleado.apellido} reactivado correctamente.")
+    messages.success(request, f"Empleado {empleado.nombre} {empleado.apellido} reactivado correctamente.", extra_tags="empleado")
+    list(messages.get_messages(request))
     return redirect('empleados_list')
 
 # ----------------------------------------------------------------------
-# COMPRAS por CLIENTE / PROVEEDOR (vínculos)
+# COMPRAS por CLIENTE / PROVEEDOR 
 # ----------------------------------------------------------------------
 @never_cache
 @login_required
@@ -907,19 +965,88 @@ def compras_proveedor(request, pk):
 # ----------------------------------------------------------------------
 # PRESUPUESTOS / PEDIDOS / CONFIG
 # ----------------------------------------------------------------------
+from django.core.paginator import Paginator
+from django.db.models import Q
+
 @never_cache
 @login_required
 @permission_required('core.view_pedidos', raise_exception=True)
 def pedidos_list(request):
-    pedidos = Pedidos.objects.all().order_by('-id_pedido')[:100] if hasattr(Pedidos, 'id_pedido') else []
-    return render(request, 'core/pedidos_list.html', {'pedidos': pedidos})
+    pedidos_qs = Pedidos.objects.select_related("id_cliente", "id_estado").order_by('-id_pedido')
+    q = request.GET.get("q", "").strip()
+    if q:
+        pedidos_qs = pedidos_qs.filter(
+            Q(id_pedido__icontains=q) |
+            Q(id_cliente__nombre__icontains=q) |
+            Q(id_cliente__apellido__icontains=q)
+        )
+
+    paginator = Paginator(pedidos_qs, 15)
+    page_number = request.GET.get("page")
+    pedidos = paginator.get_page(page_number)
+
+    return render(request, 'core/pedidos_list.html', {
+        'pedidos': pedidos,
+        'page_obj': pedidos,  
+        'q': q,
+    })
+
 
 @never_cache
 @login_required
 @permission_required('core.view_presupuestos', raise_exception=True)
 def presupuestos_list(request):
-    presupuestos = Presupuestos.objects.all().order_by('-id_presupuesto')[:100] if hasattr(Presupuestos, 'id_presupuesto') else []
-    return render(request, 'core/presupuestos_list.html', {'presupuestos': presupuestos})
+    q = request.GET.get("q", "").strip()
+    presupuestos_qs = Presupuestos.objects.select_related("id_cliente").order_by("-id_presupuesto")
+    if q:
+        presupuestos_qs = presupuestos_qs.filter(
+            Q(id_presupuesto__icontains=q) |
+            Q(id_cliente__nombre__icontains=q) |
+            Q(id_cliente__apellido__icontains=q)
+        )
+    paginator = Paginator(presupuestos_qs, 15)  
+    page_number = request.GET.get("page")
+    presupuestos = paginator.get_page(page_number)
+
+    return render(request, "core/presupuestos/presupuestos_list.html", {
+        "presupuestos": presupuestos,
+        "page_obj": presupuestos,
+        "q": q,
+    })
+
+@login_required
+def presupuesto_create(request):
+    from core.models import Productos
+    from core.models import Insumos
+
+
+    presupuesto = None
+    trabajos = None
+    productos = Productos.objects.all()
+
+    if request.method == "POST":
+        form = PresupuestoForm(request.POST)
+        if form.is_valid():
+            presupuesto = form.save(commit=False)
+            presupuesto.costo_diseno = form.cleaned_data.get("costo_diseno") or 0
+            presupuesto.margen_ganancia = form.cleaned_data.get("margen_ganancia") or 0
+            presupuesto.id_usuario = request.user
+            presupuesto.save()
+            return redirect("presupuesto_edit", presupuesto_id=presupuesto.id_presupuesto)
+    else:
+        form = PresupuestoForm()
+
+    return render(request, "core/presupuestos/presupuesto_form.html", {
+        "form": form,
+        "presupuesto": presupuesto,
+        "trabajos": trabajos,
+        "productos": productos, 
+        "title": "Nuevo presupuesto",
+        "insumos": Insumos.objects.all()
+    })
+
+
+
 
 @never_cache
 @login_required
@@ -932,35 +1059,38 @@ def configuracion(request):
 @transaction.atomic
 def convertir_presupuesto_a_pedido(request, pk):
     presupuesto = get_object_or_404(Presupuestos, id_presupuesto=pk)
-
-    # Crear el Pedido a partir del Presupuesto
     pedido = Pedidos.objects.create(
         id_cliente=presupuesto.id_cliente,
         total_pedido=presupuesto.total_presupuesto,
-        # Nota: Asume que Pedidos tiene los campos id_cliente y total_pedido
     )
+    from core.models import EstadosPedidos
+    estado_produccion = EstadosPedidos.objects.get(nombre_estado="EN PRODUCCIÓN")
+    pedido.id_estado = estado_produccion
+    pedido.save()
+    detalles_presupuesto = PresupuestosInsumos.objects.filter(presupuesto=presupuesto)
 
-    detalles_presupuesto = PresupuestosInsumos.objects.filter(id_presupuesto=presupuesto)
-
-    # Transferir detalles
     for det in detalles_presupuesto:
         PedidosInsumos.objects.create(
             pedido=pedido,
-            insumo=det.id_insumo,
+            insumo=det.insumo,
             cantidad=det.cantidad,
             precio_unitario=det.precio_unitario,
         )
+    presupuesto.estado_presupuesto = "CONFIRMADO"
+    presupuesto.save()
+    messages.success(
+        request,
+        f"✅ Pedido #{pedido.id_pedido} generado y puesto en producción.",
+        extra_tags="success"
+    )
 
-    messages.success(request, "Pedido generado correctamente. Ahora puedes modificar cantidades.")
+    return redirect("pedidos_list")  
 
-    return redirect('pedido_editar_insumos', pedido.id_pedido)
 
 
 @login_required
 def pedido_editar_insumos(request, pk):
     pedido = get_object_or_404(Pedidos, id_pedido=pk)
-
-    # Formset para editar las cantidades
     DetalleFormSet = modelformset_factory(
         PedidosInsumos,
         fields=('cantidad',),
@@ -971,7 +1101,8 @@ def pedido_editar_insumos(request, pk):
         formset = DetalleFormSet(request.POST, queryset=PedidosInsumos.objects.filter(pedido=pedido))
         if formset.is_valid():
             formset.save()
-            messages.success(request, "Cantidades actualizadas. Lista para confirmar.")
+            messages.success(request, "Cantidades actualizadas. Lista para confirmar.", extra_tags="pedidosinsumos")
+            list(messages.get_messages(request))
             return redirect('pedido_confirmar', pedido.id_pedido)
         else:
             messages.error(request, "Error al actualizar las cantidades.")
@@ -989,16 +1120,678 @@ def pedido_editar_insumos(request, pk):
 def pedido_confirmar(request, pk):
     pedido = get_object_or_404(Pedidos, id_pedido=pk)
     detalles = PedidosInsumos.objects.filter(pedido=pedido)
-
-    # Actualizar Stock
     for det in detalles:
-        # Se asume que det.insumo es la instancia de Insumos
+        if det.insumo.stock_actual < det.cantidad:
+            messages.error(
+                request,
+                f"No hay suficiente stock de {det.insumo.nombre}. Stock actual: {det.insumo.stock_actual}, necesario: {det.cantidad}"
+            )
+            return redirect('pedidos_list')
+    for det in detalles:
         det.insumo.stock_actual -= det.cantidad
         det.insumo.save()
+        StockMovimientos.objects.create(
+            insumo=det.insumo,
+            tipo='salida',
+            cantidad=det.cantidad,
+            detalle=f"Pedido #{pedido.id_pedido}"
+        )
 
-    # Actualizar Estado del Pedido
-    pedido.id_estado = get_object_or_404(EstadosPedidos, pk=2) # ejemplo: 2 = confirmado
+    pedido.id_estado = get_object_or_404(EstadosPedidos, pk=2)  
     pedido.save()
 
-    messages.success(request, "Pedido confirmado. Stock actualizado.")
+    messages.success(request, "Pedido confirmado ✅ Stock actualizado.", extra_tags="pedido")
+    list(messages.get_messages(request))
     return redirect('pedidos_list')
+
+
+@csrf_exempt 
+def unidad_medida_create_ajax(request):
+    if request.method == "POST":
+        nombre = request.POST.get("nombre")
+
+        if not nombre:
+            return JsonResponse({"success": False, "error": "Nombre vacío"})
+
+        unidad, created = UnidadMedida.objects.get_or_create(nombre=nombre)
+
+        return JsonResponse({
+            "success": True,
+            "id": unidad.id,
+            "nombre": unidad.nombre
+        })
+
+    return JsonResponse({"success": False, "error": "Método inválido"})
+
+
+    
+from core.models import Presupuestos, Trabajo, TrabajoInsumo, ConfiguracionEmpresa
+
+@login_required
+def presupuesto_detalle(request, pk):
+    presupuesto = get_object_or_404(Presupuestos, id_presupuesto=pk)
+    trabajos = Trabajo.objects.filter(presupuesto=presupuesto).prefetch_related("insumos__insumo")
+    config = ConfiguracionEmpresa.objects.first()
+    subtotal_general = sum(t.total_trabajo for t in trabajos)
+    total_general = subtotal_general + (presupuesto.costo_diseno or 0)
+
+    return render(request, "core/presupuestos/presupuesto_detalle.html", {
+        "presupuesto": presupuesto,
+        "trabajos": trabajos,
+        "config": config,
+        "subtotal_general": subtotal_general,
+        "total_general": total_general,
+    })
+
+
+def eliminar_insumo_presupuesto(request, detalle_id):
+    detalle = PresupuestosInsumos.objects.get(id_detalle=detalle_id)
+    presupuesto = detalle.presupuesto
+    subtotal_restar = detalle.cantidad * detalle.precio_unitario
+    presupuesto.subtotal = (presupuesto.subtotal or Decimal(0)) - subtotal_restar
+    if presupuesto.margen_ganancia:
+        presupuesto.total_presupuesto = presupuesto.subtotal + (presupuesto.subtotal * presupuesto.margen_ganancia / 100)
+    else:
+        presupuesto.total_presupuesto = presupuesto.subtotal
+    presupuesto.save()
+    detalle.delete()
+
+    return JsonResponse({"success": True})
+
+def editar_insumo_presupuesto(request, detalle_id):
+    if request.method == "POST":
+        detalle = PresupuestosInsumos.objects.get(id_detalle=detalle_id)
+        presupuesto = detalle.presupuesto
+        cantidad_usada = Decimal(request.POST["cantidad_usada"])
+        insumo = detalle.id_insumo
+        nueva_cantidad_real = cantidad_usada / Decimal(insumo.factor_conversion)
+        subtotal_anterior = detalle.cantidad * detalle.precio_unitario
+        presupuesto.subtotal -= subtotal_anterior
+        detalle.cantidad = nueva_cantidad_real
+        detalle.save()
+        nuevo_subtotal = nueva_cantidad_real * detalle.precio_unitario
+        presupuesto.subtotal += nuevo_subtotal
+        if presupuesto.margen_ganancia:
+            presupuesto.total_presupuesto = presupuesto.subtotal + (presupuesto.subtotal * presupuesto.margen_ganancia / 100)
+        else:
+            presupuesto.total_presupuesto = presupuesto.subtotal
+        presupuesto.save()
+        return JsonResponse({"success": True})
+
+
+@login_required
+def movimientos_stock_list(request):
+    movimientos = StockMovimientos.objects.all().order_by('-fecha_hora')[:200]
+
+    return render(request, 'core/stock/movimientos_stock_list.html', {
+        'movimientos': movimientos
+    })
+
+
+@login_required
+def producto_insumos(request, pk):
+    producto = get_object_or_404(Productos, id_producto=pk)
+
+    if producto.tipo.nombre.lower() != "fabricado":
+        messages.error(request, "Este producto no admite insumos.")
+        return redirect("productos_list")
+
+    ProductoInsumoFormSet = modelformset_factory(
+        ProductosInsumos, form=ProductoInsumoForm, extra=1, can_delete=True
+    )
+
+    formset = ProductoInsumoFormSet(
+        request.POST or None,
+        queryset=ProductosInsumos.objects.filter(producto=producto)
+    )
+
+    if request.method == "POST" and formset.is_valid():
+        instances = formset.save(commit=False)
+
+        for form in formset.deleted_objects:
+            form.delete()
+
+        for instance in instances:
+            instance.producto = producto
+            instance.save()
+
+        messages.success(request, "Insumos actualizados correctamente.", extra_tags="insumo")
+        list(messages.get_messages(request))
+        return redirect("producto_insumos", pk=producto.id_producto)
+
+    return render(request, "productos/producto_insumos.html", {
+        "producto": producto,
+        "formset": formset,
+    })
+
+
+@login_required
+def cliente_create_ajax(request):
+    if request.method == "POST":
+        nombre = request.POST.get("nombre")
+        apellido = request.POST.get("apellido")
+        dni = request.POST.get("dni")
+        email = request.POST.get("email")
+        telefono = request.POST.get("telefono")
+        direccion = request.POST.get("direccion")
+
+        if Cliente.objects.filter(email=email).exists():
+            return JsonResponse({
+                "success": False,
+                "message": "⚠️ Ya existe un cliente con ese email."
+            }, status=400)
+        if Cliente.objects.filter(dni=dni).exists():
+            return JsonResponse({
+                "success": False,
+                "message": "⚠️ Ya existe un cliente con ese DNI."
+            }, status=400)
+        cliente = Cliente.objects.create(
+            nombre=nombre,
+            apellido=apellido,
+            dni=dni,
+            email=email,
+            telefono=telefono,
+            direccion=direccion
+        )
+
+        return JsonResponse({
+            "success": True,
+            "id": cliente.id_cliente,
+            "nombre_completo": f"{cliente.nombre} {cliente.apellido}"
+        })
+
+    return JsonResponse({"success": False, "message": "Método no permitido"}, status=405)
+
+
+from core.models import Insumos
+@login_required
+def generar_pdf_presupuesto(request, pk):
+    from django.conf import settings
+    import os
+
+    presupuesto = get_object_or_404(Presupuestos, pk=pk)
+    trabajos = presupuesto.trabajos.all()
+    total_general = trabajos.aggregate(total=Sum("total_trabajo"))["total"] or 0
+    config = ConfiguracionEmpresa.objects.first()
+
+    logo_path = None
+    if config and config.logo:
+        logo_path = os.path.join(settings.MEDIA_ROOT, config.logo.name).replace("\\", "/")
+
+    template_path = "core/presupuestos/presupuesto_pdf_template.html"
+    context = {
+        "presupuesto": presupuesto,
+        "trabajos": trabajos,
+        "total_general": total_general,
+        "config": config,
+        "logo_path": logo_path
+    }
+
+    template = get_template(template_path)
+    html = template.render(context)
+
+    response = HttpResponse(content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename=\"Presupuesto_{pk}.pdf\"'
+
+    pisa.CreatePDF(html, dest=response)
+    return response
+
+
+
+@login_required
+def presupuesto_confirmar(request, pk):
+    presupuesto = get_object_or_404(Presupuestos, id_presupuesto=pk)
+    presupuesto.estado_presupuesto = "EN ESPERA"
+    presupuesto.save()
+    return redirect("presupuesto_detalle", pk)
+
+
+
+@login_required
+def presupuesto_edit(request, presupuesto_id):
+    presupuesto = get_object_or_404(Presupuestos, id_presupuesto=presupuesto_id)
+    trabajos = presupuesto.trabajos.all() 
+
+    if request.method == "POST":
+        form = PresupuestoForm(request.POST, instance=presupuesto)
+
+        if form.is_valid():
+            presupuesto = form.save(commit=False)
+            subtotal = trabajos.aggregate(total=Sum("total_trabajo"))["total"] or 0
+            presupuesto.subtotal = subtotal
+
+            total = subtotal
+
+            if presupuesto.costo_diseno:
+                total += presupuesto.costo_diseno
+
+            if presupuesto.margen_ganancia:
+                total = total * (1 + (presupuesto.margen_ganancia / 100))
+
+            presupuesto.total_presupuesto = total
+            presupuesto.save()
+
+            messages.success(request, "✅ Presupuesto actualizado exitosamente.")
+            list(messages.get_messages(request))  
+            return redirect("presupuesto_detalle", presupuesto.id_presupuesto)
+
+        else:
+            messages.error(request, "⚠️ Error al actualizar el presupuesto.")
+            list(messages.get_messages(request))
+
+    else:
+        form = PresupuestoForm(instance=presupuesto)
+
+    return render(request, "core/presupuestos/presupuesto_form.html", {
+        "form": form,
+        "presupuesto": presupuesto,
+        "trabajos": trabajos,
+        "title": "Editar presupuesto",
+    })
+
+
+
+
+@login_required
+def configuracion_empresa(request):
+    config = ConfiguracionEmpresa.objects.first()
+    if not config:
+        config = ConfiguracionEmpresa.objects.create()
+    if request.method == "POST":
+        form = ConfiguracionEmpresaForm(request.POST, request.FILES, instance=config)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Configuración guardada ✅")
+            return redirect("configuracion_empresa")
+    else:
+        form = ConfiguracionEmpresaForm(instance=config)
+    return render(request, "core/configuracion_empresa.html", {"form": form})
+
+
+
+@login_required
+def presupuesto_previa_pdf(request, pk):
+    presupuesto = Presupuestos.objects.get(pk=pk)
+    detalle = PresupuestosInsumos.objects.filter(presupuesto=presupuesto)
+    config = ConfiguracionEmpresa.objects.first()
+
+    if request.method == "POST":
+        config.nombre_empresa = request.POST.get("nombre_empresa")
+        config.direccion = request.POST.get("direccion")
+        config.telefono = request.POST.get("telefono")
+        config.email = request.POST.get("email")
+        config.condiciones_pago = request.POST.get("condiciones_pago")
+        config.otros_detalles = request.POST.get("otros_detalles")
+        config.save()
+
+        return redirect("presupuesto_pdf", pk=pk)
+
+    return render(request, "core/presupuestos/previa_pdf.html", {
+        "presupuesto": presupuesto,
+        "detalle": detalle,
+        "config": config,
+    })
+
+
+@login_required
+def preview_pdf_presupuesto(request, pk):
+    presupuesto = get_object_or_404(Presupuestos, pk=pk)
+    trabajos = presupuesto.trabajos.all()
+    total_general = trabajos.aggregate(total=Sum("total_trabajo"))["total"] or 0
+    config = ConfiguracionEmpresa.objects.first()
+    return render(request, "core/presupuestos/presupuesto_pdf_template.html", {
+        "presupuesto": presupuesto,
+        "trabajos": trabajos,
+        "total_general": total_general,
+        "config": config,
+        "preview": True,  
+    })
+
+
+@login_required
+def configuracion_email(request):
+    config = ConfiguracionEmail.objects.first()
+
+    if not config:
+        config = ConfiguracionEmail.objects.create()
+
+    if request.method == "POST":
+        form = ConfiguracionEmailForm(request.POST, instance=config)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Configuración de Email guardada ✅")
+            return redirect("configuracion_email")
+    else:
+        form = ConfiguracionEmailForm(instance=config)
+
+    return render(request, "core/configuracion_email.html", {"form": form})
+
+
+
+
+@login_required
+def presupuesto_enviar_email(request, pk):
+    config = ConfiguracionEmail.objects.first()
+    presupuesto = Presupuestos.objects.get(pk=pk)
+    pdf_bytes = request.session.get("pdf_presupuesto").encode("latin1")
+    email_to = request.POST.get("email_to", presupuesto.id_cliente.email)
+    mensaje = request.POST.get("mensaje")
+    email = EmailMessage(
+        subject=f"Presupuesto #{presupuesto.id_presupuesto}",
+        body=mensaje,
+        from_email=config.email_remitente,
+        to=[email_to],
+    )
+
+    email.attach(f"Presupuesto_{pk}.pdf", pdf_bytes, "application/pdf")
+    email.send()
+    messages.success(request, "✅ Presupuesto enviado por email correctamente.")
+    list(messages.get_messages(request))
+    return redirect("presupuesto_detalle", pk=pk)
+
+
+
+@login_required
+def presupuesto_email_preview(request, pk):
+    presupuesto = Presupuestos.objects.get(pk=pk)
+    detalle = PresupuestosInsumos.objects.filter(presupuesto=presupuesto)
+    config = ConfiguracionEmpresa.objects.first()
+    response_pdf = generar_pdf_presupuesto(request, pk)
+    pdf_bytes = response_pdf.content
+    request.session["pdf_presupuesto"] = pdf_bytes.decode("latin1")
+    mensaje_predefinido = f"""
+Hola {presupuesto.id_cliente.nombre} {presupuesto.id_cliente.apellido},
+Te envío el presupuesto solicitado.
+Monto total: ${presupuesto.total_presupuesto}
+Quedo atenta a tus comentarios.
+Saludos!
+
+Emilia Lopez
+{config.nombre_empresa if config and config.nombre_empresa else "Tinta Negra"}
+""".strip()
+
+    return render(request, "core/presupuestos/email_preview.html", {
+        "presupuesto": presupuesto,
+        "detalle": detalle,
+        "config": config,
+        "mensaje_predefinido": mensaje_predefinido
+    })
+
+
+@login_required
+def agregar_trabajo_presupuesto(request, presupuesto_id):
+    presupuesto = Presupuestos.objects.get(pk=presupuesto_id)
+
+    if request.method == "POST":
+        trabajo = request.POST["trabajo"]
+        cantidad = int(request.POST["cantidad"])
+        precio_unitario = float(request.POST["precio_unitario"])
+        subtotal = cantidad * precio_unitario
+        editar_id = request.POST.get("editar_id")
+        if editar_id:
+            Trabajo.objects.get(pk=editar_id).delete()
+        PresupuestosProductos.objects.create(
+            presupuesto=presupuesto,
+            trabajo=trabajo,
+            cantidad=cantidad,
+            precio_unitario=precio_unitario,
+            subtotal=subtotal,
+        )
+        presupuesto.total_presupuesto += subtotal
+        presupuesto.save()
+
+        return redirect("presupuesto_detalle", presupuesto_id)
+
+    return render(request, "core/presupuestos/agregar_trabajo.html", {
+        "presupuesto": presupuesto,
+    })
+
+
+@login_required
+def guardar_trabajo(request, pk):
+    presupuesto = get_object_or_404(Presupuestos, pk=pk)
+    if request.method == "POST":
+        nombre = request.POST.get("nombre_trabajo")
+        cantidad = int(request.POST.get("cantidad_trabajo", 1))
+        subtotal = float(request.POST.get("subtotal_trabajo", 0))
+        if not nombre:
+            messages.error(request, "Debe ingresar un nombre para el trabajo.")
+            return redirect("presupuesto_edit", pk)
+        presupuesto.subtotal += subtotal * cantidad
+        presupuesto.total_presupuesto = presupuesto.subtotal + float(presupuesto.costo_diseno or 0)
+        presupuesto.save()
+
+        messages.success(request, "Trabajo agregado ✅")
+        list(messages.get_messages(request))
+        return redirect("presupuesto_edit", pk)
+    
+
+@require_POST
+@login_required
+def crear_presupuesto_borrador(request):
+    cliente_id = request.POST.get("cliente_id")
+    cliente = Cliente.objects.filter(pk=cliente_id).first()
+
+    if not cliente:
+        return JsonResponse({"ok": False, "error": "Cliente no encontrado"})
+
+    fecha_emision = request.POST.get("fecha_emision") or timezone.now().date()
+    fecha_vencimiento = request.POST.get("fecha_vencimiento") or None
+    costo_diseno = request.POST.get("costo_diseno") or 0
+    margen_ganancia = request.POST.get("margen_ganancia") or 0
+
+    presupuesto = Presupuestos.objects.create(
+        id_cliente=cliente,
+        fecha_emision=fecha_emision,
+        fecha_vencimiento=fecha_vencimiento,
+        costo_diseno=costo_diseno,
+        margen_ganancia=margen_ganancia,
+        subtotal=0,
+        total_presupuesto=0,
+        estado_presupuesto="EN ESPERA"
+    )
+
+    return JsonResponse({"ok": True, "presupuesto_id": presupuesto.id_presupuesto})
+
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def agregar_trabajo(request, presupuesto_id):
+    presupuesto = get_object_or_404(Presupuestos, pk=presupuesto_id)
+    from core.models import Insumos
+
+    nombre = (request.POST.get("nombre_trabajo") or "").strip()
+    if not nombre:
+        return HttpResponseBadRequest("Falta nombre_trabajo")
+
+    descripcion = (request.POST.get("descripcion_trabajo") or "").strip()
+
+    try:
+        cantidad_trabajo = int(request.POST.get("cantidad_trabajo") or "1")
+        cantidad_trabajo = max(1, cantidad_trabajo)
+    except ValueError:
+        cantidad_trabajo = 1
+
+    try:
+        costo_diseno = float(request.POST.get("costo_diseno_trabajo") or 0)
+        margen = float(request.POST.get("margen_trabajo") or 0)
+        margen = max(0.0, min(margen, 100.0))
+    except ValueError:
+        costo_diseno, margen = 0.0, 0.0
+
+    insumo_ids = request.POST.getlist("insumo[]")
+    cantidades = request.POST.getlist("cantidad[]")
+
+    if not insumo_ids:
+        return HttpResponseBadRequest("Debe agregar al menos un insumo")
+
+    trabajo = Trabajo.objects.create(
+        presupuesto=presupuesto,
+        nombre_trabajo=nombre,
+        descripcion=descripcion,
+        cantidad=cantidad_trabajo,
+        costo_diseno=costo_diseno,
+        margen_ganancia=margen,
+    )
+
+    subtotal_insumos = 0.0
+
+    for insumo_id, cant_str in zip(insumo_ids, cantidades):
+        if not insumo_id:
+            continue
+
+        try:
+            cant = float(cant_str or 0)
+        except ValueError:
+            cant = 0.0
+
+        if cant <= 0:
+            continue
+
+        insumo = Insumos.objects.get(pk=insumo_id)
+        costo_unitario_real = float(insumo.precio_costo_unitario) / float(insumo.factor_conversion or 1)
+
+        item_subtotal = costo_unitario_real * cant
+        subtotal_insumos += item_subtotal
+
+        TrabajoInsumo.objects.create(
+            trabajo=trabajo,
+            insumo=insumo,
+            cantidad=cant,
+            precio_unitario=costo_unitario_real,
+            subtotal=item_subtotal,
+        )
+
+    precio_unitario = subtotal_insumos + costo_diseno + (subtotal_insumos * (margen / 100.0))
+    total_trabajo = precio_unitario * cantidad_trabajo
+
+    trabajo.subtotal_insumos = round(subtotal_insumos, 2)
+    trabajo.precio_unitario = round(precio_unitario, 2)
+    trabajo.total_trabajo = round(total_trabajo, 2)
+    trabajo.save()
+
+    tot = presupuesto.trabajos.aggregate(s=Sum("total_trabajo"))["s"] or 0
+    presupuesto.subtotal = tot
+    presupuesto.total_presupuesto = tot
+    presupuesto.save()
+
+    html = render_to_string("core/presupuestos/_tabla_trabajos.html", {"presupuesto": presupuesto})
+    return JsonResponse({"ok": True, "tabla": html})
+
+
+@login_required
+def listar_trabajos(request, presupuesto_id):
+    presupuesto = get_object_or_404(Presupuestos, pk=presupuesto_id)
+    html = render_to_string("core/presupuestos/_tabla_trabajos.html", {"presupuesto": presupuesto})
+    return JsonResponse({"ok": True, "tabla": html})
+
+
+@login_required
+@require_POST
+def eliminar_trabajo(request, trabajo_id):
+    trabajo = get_object_or_404(Trabajo, pk=trabajo_id)
+    presupuesto = trabajo.presupuesto
+    trabajo.delete()
+    tot = presupuesto.trabajos.aggregate(s=Sum("total_trabajo"))["s"] or 0
+    presupuesto.subtotal = tot
+    presupuesto.total_presupuesto = tot
+    presupuesto.save()
+    return JsonResponse({"ok": True})
+
+
+@login_required
+def obtener_trabajo(request, trabajo_id):
+    trabajo = get_object_or_404(Trabajo, pk=trabajo_id)
+    insumos = trabajo.insumos.values("insumo_id", "cantidad", "precio_unitario")
+
+    return JsonResponse({
+        "id": trabajo.id,
+        "nombre": trabajo.nombre_trabajo,
+        "descripcion": trabajo.descripcion or "",
+        "cantidad": trabajo.cantidad,
+        "costo_diseno": float(trabajo.costo_diseno),
+        "margen": float(trabajo.margen_ganancia),
+        "insumos": list(insumos),
+    })
+
+
+@login_required
+def obtener_producto(request, producto_id):
+    from core.models import Productos
+
+    producto = Productos.objects.filter(pk=producto_id).first()
+    if not producto:
+        return JsonResponse({"ok": False, "error": "Producto no encontrado"})
+
+    return JsonResponse({
+        "ok": True,
+        "id": producto.id_producto,
+        "nombre": producto.nombre,
+        "precio": float(producto.precio or 0),
+        "descripcion": producto.descripcion or ""
+    })
+
+
+@login_required
+def presupuesto_aprobar(request, id):
+    presupuesto = get_object_or_404(Presupuestos, id_presupuesto=id)
+
+    presupuesto.estado_presupuesto = "CONFIRMADO"
+    presupuesto.save()
+
+    return redirect("presupuesto_detalle", presupuesto.id_presupuesto)
+
+
+@login_required
+@transaction.atomic
+def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido"}, status=405)
+
+    pedido = get_object_or_404(Pedidos, id_pedido=id_pedido)
+
+    estado = EstadosPedidos.objects.get(nombre_estado=nuevo_estado)
+    pedido.id_estado = estado
+    pedido.save()
+
+    return JsonResponse({
+        "success": True,
+        "nuevo_estado": estado.nombre_estado
+    })
+
+@never_cache
+@login_required
+@permission_required('core.view_movimientoscaja', raise_exception=True)
+def movimientos_list(request):
+    q = request.GET.get("q", "")
+    desde = request.GET.get("desde")
+    hasta = request.GET.get("hasta")
+    forma_pago = request.GET.get("forma_pago")
+
+    movs = MovimientosCaja.objects.all().order_by("-fecha_hora")
+    if q:
+        movs = movs.filter(Q(descripcion__icontains=q))
+
+    if desde:
+        movs = movs.filter(fecha_hora__date__gte=desde)
+
+    if hasta:
+        movs = movs.filter(fecha_hora__date__lte=hasta)
+
+    if forma_pago:
+        movs = movs.filter(forma_pago__id_forma=forma_pago)
+    paginator = Paginator(movs, 15)
+    page_number = request.GET.get("page")
+    movs = paginator.get_page(page_number)
+
+    form = MovimientoCajaForm()
+    formas_pago = FormaPago.objects.all()
+
+    return render(request, "core/caja/movimientos_list.html", {
+        "movs": movs,        
+        "form": form,
+        "formas_pago": formas_pago,
+        "page_obj": movs,    
+    })

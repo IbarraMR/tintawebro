@@ -4,6 +4,7 @@
 {% block title %}Empleados | Listado{% endblock %}
 
 {% block content %}
+  {% include "core/partials/toasts.html" %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2 class="text-white mb-0">Listado de Empleados</h2>
 
@@ -15,15 +16,11 @@
     <span class="text-danger fw-bold">No tienes permiso para registrar nuevos empleados.</span>
   {% endif %}
 </div>
-
-<!-- 🔍 Barra de búsqueda -->
 <form method="get" class="mb-4 d-flex justify-content-center">
   <input type="text" name="q" class="form-control me-2" style="width: 40%;"
          placeholder="Buscar por nombre, apellido, DNI, teléfono o rol" value="{{ request.GET.q }}">
   <button type="submit" class="btn btn-primary">Buscar</button>
 </form>
-
-<!-- 📢 Mensajes -->
 {% if messages %}
   {% for message in messages %}
     <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
@@ -32,8 +29,6 @@
     </div>
   {% endfor %}
 {% endif %}
-
-<!-- 🧾 Tabla de empleados -->
 <div class="card p-4" style="background-color:#1f1f1f; border:1px solid #333;">
   {% if empleados %}
   <div class="table-responsive">

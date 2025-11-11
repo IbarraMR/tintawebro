@@ -1,0 +1,47 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Movimientos de Stock{% endblock %}
+
+{% block content %}
+    {% include "core/partials/toasts.html" %}
+<h2 class="mb-4 text-white">Historial de Movimientos de Stock</h2>
+
+<div class="card p-4" style="background-color:#1f1f1f; border:1px solid #333;">
+
+    <table class="table table-dark table-striped align-middle text-center">
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Insumo</th>
+                <th>Tipo</th>
+                <th>Cantidad</th>
+                <th>Detalle</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for mov in movimientos %}
+            <tr>
+                <td>{{ mov.fecha_hora|date:"d/m/Y H:i" }}</td>
+                <td>{{ mov.insumo.nombre }}</td>
+                <td>
+                    {% if mov.tipo == 'entrada' %}
+                        <span class="badge bg-success">Entrada</span>
+                    {% else %}
+                        <span class="badge bg-danger">Salida</span>
+                    {% endif %}
+                </td>
+                <td>{{ mov.cantidad }}</td>
+                <td>{{ mov.detalle }}</td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="5" class="text-secondary">No hay movimientos registrados.</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,112 @@
+{% extends 'core/base.html' %}
+{% load humanize %}
+
+{% block title %}Presupuesto #{{ presupuesto.id_presupuesto }}{% endblock %}
+
+{% block content %}
+
+<div class="container mt-4">
+
+    <h2 class="text-white">Presupuesto #{{ presupuesto.id_presupuesto }}</h2>
+    <p class="text-secondary">
+        <strong class="text-white">Cliente:</strong> {{ presupuesto.id_cliente }}
+    </p>
+
+    <div class="card p-4 mb-4" style="background:#1a1a1a; border:1px solid #2c2c2c;">
+
+        <h4 class="text-white">Resumen</h4>
+
+        <p class="text-white mt-3">
+            <strong>Subtotal:</strong> ${{ presupuesto.subtotal|floatformat:2 }}
+        </p>
+        <p class="text-white">
+            <strong>Total con ganancia:</strong> ${{ presupuesto.total_presupuesto|floatformat:2 }}
+        </p>
+
+        <div class="mt-4 d-flex gap-2">
+            {% if presupuesto.estado_presupuesto != "CONFIRMADO" %}
+            <a href="{% url 'convertir_presupuesto_a_pedido' presupuesto.id_presupuesto %}"
+              class="btn btn-success">
+              ✅ Confirmar presupuesto y generar Pedido
+            </a>
+            {% endif %}
+
+            <a href="{% url 'presupuesto_edit' presupuesto.id_presupuesto %}" class="btn btn-warning">
+                ✏️ Editar
+            </a>
+
+            <a href="{% url 'presupuesto_previa_pdf' presupuesto.id_presupuesto %}" class="btn btn-info">
+                👀 Previsualizar PDF
+            </a>
+
+            <a href="{% url 'generar_pdf_presupuesto' presupuesto.id_presupuesto %}" class="btn btn-light">
+                📄 Descargar PDF
+            </a>
+
+            <a href="{% url 'presupuesto_email_preview' presupuesto.id_presupuesto %}" class="btn btn-primary">
+                🟢 Enviar por email
+            </a>
+        </div>
+
+        <a href="{% url 'presupuestos_list' %}" class="btn btn-secondary mt-3">⬅ Volver al presupuesto</a>
+    </div>
+
+
+    {% if trabajos %}
+        {% for t in trabajos %}
+
+        <div class="card p-3 mb-4" style="background:#1b1b1b; border:1px solid #2f2f2f;">
+            <h4 class="text-info">{{ t.nombre_trabajo }}</h4>
+
+            {% if t.descripcion %}
+                <p class="text-secondary">{{ t.descripcion }}</p>
+            {% endif %}
+
+            <p class="text-white">
+                <strong>Cantidad: </strong>{{ t.cantidad }}
+                &nbsp;|&nbsp; <strong>Costo diseño:</strong> ${{ t.costo_diseno|floatformat:2 }}
+                &nbsp;|&nbsp; <strong>Margen:</strong> {{ t.margen_ganancia }}%
+            </p>
+
+            <table class="table table-dark table-bordered table-striped mt-3 text-center align-middle">
+                <thead>
+                    <tr>
+                        <th>Insumo</th>
+                        <th>Cantidad usada</th>
+                        <th>Precio unitario</th>
+                        <th>Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for insumo in t.insumos.all %}
+                    <tr>
+                        <td>{{ insumo.insumo.nombre }}</td>
+                        <td>{{ insumo.cantidad }}</td>
+                        <td>$ {{ insumo.precio_unitario|floatformat:2 }}</td>
+                        <td><strong>$ {{ insumo.subtotal|floatformat:2 }}</strong></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-secondary">No se registraron insumos para este trabajo.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="text-end mt-2">
+                <p class="text-secondary mb-1">Subtotal insumos: ${{ t.subtotal_insumos|floatformat:2 }}</p>
+                <p class="text-white fw-bold">Total trabajo: ${{ t.total_trabajo|floatformat:2 }}</p>
+            </div>
+        </div>
+
+        {% endfor %}
+
+    {% else %}
+        <div class="alert alert-dark text-center mt-4">
+            No se agregaron trabajos ni insumos a este presupuesto.
+        </div>
+    {% endif %}
+
+</div>
+
+{% endblock %}

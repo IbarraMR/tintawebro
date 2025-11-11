@@ -1,0 +1,27 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Enviar presupuesto{% endblock %}
+
+{% block content %}
+
+<div class="container mt-4 text-white">
+
+    <h2>Vista previa del mensaje</h2>
+    <p>Este mensaje se enviará al cliente con el PDF adjunto.</p>
+
+    <form method="post" action="{% url 'presupuesto_enviar_email' presupuesto.id_presupuesto %}">
+        {% csrf_token %}
+
+        <label class="form-label">Destinatario</label>
+        <input type="email" name="email_to" class="form-control" value="{{ presupuesto.id_cliente.email }}" required>
+
+        <label class="form-label mt-3">Mensaje</label>
+        <textarea name="mensaje" rows="8" class="form-control">{{ mensaje_predefinido }}</textarea>
+
+
+        <button type="submit" class="btn btn-success mt-3">Enviar correo</button>
+        <a class="btn btn-secondary mt-3" href="{% url 'presupuesto_detalle' presupuesto.id_presupuesto %}">Cancelar</a>
+    </form>
+
+</div>
+{% endblock %}

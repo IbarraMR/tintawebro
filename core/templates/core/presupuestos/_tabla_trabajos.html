@@ -1,0 +1,35 @@
+<table class="table table-dark table-bordered text-center mt-2">
+  <thead>
+    <tr>
+      <th>Trabajo</th>
+      <th>Cant.</th>
+      <th>Precio unitario</th>
+      <th>Total</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in presupuesto.trabajos.all %}
+    <tr>
+      <td>
+        <div class="text-start">
+          <b>{{ t.nombre_trabajo }}</b>
+          {% if t.descripcion %}
+            <div class="small text-secondary">{{ t.descripcion }}</div>
+          {% endif %}
+        </div>
+      </td>
+      <td>{{ t.cantidad }}</td>
+      <td>$ {{ t.precio_unitario }}</td>
+      <td><b>$ {{ t.total_trabajo }}</b></td>
+      <td>
+        <button class="btn btn-warning btn-sm btn-editar-trabajo"  data-id="{{ t.id }}">✏️</button>
+        <button class="btn btn-danger btn-sm btn-eliminar-trabajo" data-id="{{ t.id }}">❌</button>
+        <button class="btn btn-secondary btn-sm btn-duplicar" data-id="{{ t.id }}">📄</button>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5" class="text-secondary">Sin trabajos aún.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

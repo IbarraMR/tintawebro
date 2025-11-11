@@ -1,3 +1,4 @@
+{% load widget_tweaks %}
 <div class="modal fade" id="insumoModal" tabindex="-1" aria-labelledby="insumoModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content bg-dark text-white">
@@ -10,7 +11,38 @@
       <form id="insumoFormModal" method="post" action="{% url 'insumo_create_ajax' %}">
       <div class="modal-body">
           {% csrf_token %}
-          {{ insumo_form.as_p }} 
+          <div class="mb-2">
+            <label class="form-label">Proveedor:</label>
+            {{ insumo_form.proveedor|add_class:"form-select" }}
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Nombre:</label>
+            {{ insumo_form.nombre|add_class:"form-control" }}
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Descripción:</label>
+            {{ insumo_form.descripcion|add_class:"form-control" }}
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-2">
+              <label class="form-label">Unidad de medida:</label>
+              {{ insumo_form.unidad_medida|add_class:"form-control" }}
+            </div>
+
+            <div class="col-md-6 mb-2">
+              <label class="form-label">Stock mínimo:</label>
+              {{ insumo_form.stock_minimo|add_class:"form-control" }}
+            </div>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Precio costo unitario:</label>
+            {{ insumo_form.precio_costo_unitario|add_class:"form-control" }}
+          </div>
+
       </div>
       
       <div class="modal-footer border-secondary">

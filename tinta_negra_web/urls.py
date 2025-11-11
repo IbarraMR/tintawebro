@@ -10,62 +10,102 @@ from tinta_negra_web.views import (
     convertir_presupuesto_a_pedido,
     pedido_editar_insumos,
     pedido_confirmar,
+    unidad_medida_create_ajax,
+    agregar_insumo_presupuesto,
+    presupuesto_detalle,
+    presupuestos_list,
+    presupuesto_create,
+    eliminar_insumo_presupuesto,
+    editar_insumo_presupuesto,
+    movimientos_stock_list,
+    producto_insumos,
+    generar_pdf_presupuesto,
+    guardar_trabajo,
+    presupuesto_aprobar,
+    presupuesto_confirmar,
+    pedido_cambiar_estado,
+    
+
 )
 
 urlpatterns = [
 
-    # --- LOGIN / LOGOUT ---
     path('admin/', admin.site.urls),
     path('', views.root_redirect, name='root_redirect'),
     path('login/', auth_views.LoginView.as_view(template_name='core/login.html'), name='login'),
     path('logout/', logout_view, name='logout'),
 
-    # --- HOME ---
+
     path('home/', views.home, name='home'),
 
-    # --- COMPRAS ---
     
     path('compras/', views.compras_list, name='compras_list'),
     path('compras/nueva/', views.compras_create, name='compras_create'),
     path('compras/<int:pk>/', views.compra_detalle, name='compra_detalle'),
 
-    # --- CLIENTES ---
     path('clientes/', views.clientes_list, name='clientes_list'),
     path('clientes/nuevo/', views.cliente_create, name='cliente_create'),
     path('clientes/editar/<int:pk>/', views.cliente_edit, name='cliente_edit'),
     path('clientes/eliminar/<int:pk>/', views.cliente_delete, name='cliente_delete'),
     path('clientes/<int:pk>/compras/', views.compras_cliente, name='compras_cliente'),
 
-    # --- PROVEEDORES ---
     path('proveedores/', views.proveedores_list, name='proveedores_list'),
     path('proveedor/nuevo/', views.proveedor_create, name='proveedor_create'),
     path('proveedores/<int:pk>/editar/', views.proveedor_edit, name='proveedor_edit'),
     path('proveedores/<int:pk>/baja/', views.proveedor_baja_logica, name='proveedor_baja'),
     path('proveedores/<int:pk>/reactivar/', views.proveedor_reactivar, name='proveedor_reactivar'),
+    path('compras/proveedor/<int:proveedor_id>/', views.compras_proveedor, name='compras_proveedor'),
     path('ajax/proveedor/nuevo/', proveedor_create_ajax, name='proveedor_create_ajax'),
 
-    # --- INSUMOS ---
     path('insumos/', views.insumos_list, name='insumos_list'),
     path("insumos/nuevo/", views.insumo_create, name="insumo_create"),
     path('insumos/editar/<int:pk>/', views.insumo_edit, name='insumo_edit'),
     path('insumos/eliminar/<int:pk>/', views.insumo_delete, name='insumo_delete'),
+    path("presupuesto/<int:presupuesto_id>/agregar-insumo/", agregar_insumo_presupuesto, name="agregar_insumo_presupuesto"),
 
 
-    # --- AJAX INSUMOS ---
     path('ajax/insumo/create/', views.insumo_nuevo_ajax, name='insumo_create_ajax'),
     path("ajax/insumo/datos/<int:pk>/", views.insumo_datos_ajax, name="insumo_datos_ajax"),
     path("ajax/insumo/editar/", views.insumo_editar_ajax, name="insumo_editar_ajax"),
+    path("unidad-medida/create/ajax/", unidad_medida_create_ajax, name="unidad_medida_create_ajax"),
+
+    path("presupuesto/borrador/crear/", views.crear_presupuesto_borrador, name="crear_presupuesto_borrador"),
+    path("presupuesto/<int:presupuesto_id>/trabajos/agregar/", views.agregar_trabajo, name="agregar_trabajo"),
+    path("presupuesto/<int:presupuesto_id>/trabajos/listar/", views.listar_trabajos, name="listar_trabajos"),
+    path("trabajo/<int:trabajo_id>/eliminar/", views.eliminar_trabajo, name="eliminar_trabajo"),
 
 
-    # --- PEDIDOS / PRESUPUESTOS ---
     path("pedidos/", views.pedidos_list, name="pedidos_list"),
     path("presupuestos/", views.presupuestos_list, name="presupuestos_list"),
-
     path("presupuestos/<int:pk>/generar-pedido/", convertir_presupuesto_a_pedido, name="convertir_presupuesto_a_pedido"),
     path("pedidos/<int:pk>/editar-insumos/", pedido_editar_insumos, name="pedido_editar_insumos"),
     path("pedidos/<int:pk>/confirmar/", pedido_confirmar, name="pedido_confirmar"),
+    path("presupuesto/<int:pk>/detalle/", presupuesto_detalle, name="presupuesto_detalle"),
+    path("presupuesto/<int:presupuesto_id>/agregar-insumo/", agregar_insumo_presupuesto, name="agregar_insumo_presupuesto"),
+    path("presupuesto/nuevo/", presupuesto_create, name="presupuesto_create"),
+    path("presupuesto/<int:presupuesto_id>/agregar-insumo/", agregar_insumo_presupuesto, name="agregar_insumo_presupuesto"),
+    path("presupuesto/detalle/<int:detalle_id>/eliminar/", eliminar_insumo_presupuesto, name="eliminar_insumo_presupuesto"),
+    path("presupuesto/detalle/<int:detalle_id>/editar/", editar_insumo_presupuesto, name="editar_insumo_presupuesto"),
+    path("stock/movimientos/", movimientos_stock_list, name="movimientos_stock_list"),
+    path("productos/<int:pk>/insumos/", producto_insumos, name="producto_insumos"),
+    path("cliente/create/ajax/", views.cliente_create_ajax, name="cliente_create_ajax"),
+    path("configuracion/", views.configuracion_empresa, name="configuracion_empresa"),
+    path("presupuesto/<int:pk>/pdf/", views.generar_pdf_presupuesto, name="generar_pdf_presupuesto"),
+    path("presupuesto/<int:pk>/confirmar/", presupuesto_confirmar, name="presupuesto_confirmar"),
+    path("presupuesto/<int:pk>/previsualizar/", views.presupuesto_previa_pdf, name="presupuesto_previa_pdf"),
+    path("presupuesto/<int:pk>/preview/", views.preview_pdf_presupuesto, name="presupuesto_preview"),
+    path("configuracion/email/", views.configuracion_email, name="configuracion_email"),
+    path("presupuesto/<int:pk>/enviar-email/", views.presupuesto_enviar_email, name="presupuesto_enviar_email"),
+    path("presupuesto/<int:pk>/email-preview/", views.presupuesto_email_preview, name="presupuesto_email_preview"),
+    path("presupuesto/<int:pk>/preview/", views.presupuesto_previa_pdf, name="presupuesto_previa_pdf"),
+    path("presupuesto/<int:pk>/guardar_trabajo/", guardar_trabajo, name="guardar_trabajo"),
+    path("trabajo/<int:trabajo_id>/obtener/", views.obtener_trabajo, name="obtener_trabajo"),
+    path("producto/<int:producto_id>/obtener/", views.obtener_producto, name="obtener_producto"),
+    path("presupuesto/<int:id>/aprobar/", presupuesto_aprobar, name="presupuesto_aprobar"),
+    path("presupuesto/<int:presupuesto_id>/editar/", views.presupuesto_edit, name="presupuesto_edit"),
+    path("pedidos/<int:id_pedido>/estado/<str:nuevo_estado>/", pedido_cambiar_estado, name="pedido_cambiar_estado"),
 
-    # --- EMPLEADOS ---
+
     path('empleados/', views.empleados_list, name='empleados_list'),
     path('empleados/nuevo/', views.empleado_create, name='empleado_create'),
     path('empleados/editar/<int:pk>/', views.empleado_edit, name='empleado_edit'),
@@ -73,7 +113,6 @@ urlpatterns = [
     path('empleados/<int:pk>/baja/', views.empleado_baja_logica, name='empleado_baja'),
     path('empleados/<int:pk>/reactivar/', views.empleado_reactivar, name='empleado_reactivar'),
 
-    # --- CAJA ---
     path('cajas/', views.cajas_list, name='cajas_list'),
     path('cajas/abrir/', views.abrir_caja_view, name='abrir_caja'),
     path('cajas/cerrar/', views.cerrar_caja_view, name='cerrar_caja'),
@@ -86,6 +125,7 @@ urlpatterns = [
 
 
     path('configuracion/', views.configuracion, name='configuracion'),
+    path("pedidos/<int:id_pedido>/estado/<str:nuevo_estado>/", pedido_cambiar_estado, name="pedido_cambiar_estado"),
 
 
 ]

@@ -1,0 +1,54 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Vista previa PDF - Presupuesto {{ presupuesto.id_presupuesto }}{% endblock %}
+
+{% block content %}
+
+<div class="container mt-4">
+
+    <h2 class="text-white">Vista previa del PDF</h2>
+    <p class="text-secondary">Presupuesto #{{ presupuesto.id_presupuesto }}</p>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="row">
+            <div class="col-md-6">
+
+                <label class="form-label text-white">Nombre de la empresa</label>
+                <input type="text" name="nombre_empresa" value="{{ config.nombre_empresa }}" class="form-control">
+
+                <label class="form-label text-white mt-3">Dirección</label>
+                <input type="text" name="direccion" value="{{ config.direccion }}" class="form-control">
+
+                <label class="form-label text-white mt-3">Email</label>
+                <input type="email" name="email" value="{{ config.email }}" class="form-control">
+
+                <label class="form-label text-white mt-3">Teléfono</label>
+                <input type="text" name="telefono" value="{{ config.telefono }}" class="form-control">
+
+            </div>
+
+            <div class="col-md-6">
+
+                <label class="form-label text-white">Condiciones de pago</label>
+                <textarea name="condiciones_pago" class="form-control" rows="4">{{ config.condiciones_pago }}</textarea>
+
+                <label class="form-label text-white mt-3">Otros detalles</label>
+                <textarea name="otros_detalles" class="form-control" rows="4">{{ config.otros_detalles }}</textarea>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-center gap-3 mt-4">
+            <button type="submit" class="btn btn-success">✅ Generar PDF</button>
+            <a href="{% url 'presupuesto_detalle' presupuesto.id_presupuesto %}" class="btn btn-secondary">
+                ❌ Cancelar
+            </a>
+        </div>
+
+    </form>
+
+</div>
+
+{% endblock %}

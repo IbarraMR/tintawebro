@@ -10,7 +10,6 @@
 
     <div class="row g-4 mb-5">
 
-        <!-- Mis pedidos pendientes -->
         <div class="col-xl-3 col-md-6">
             <div class="dashboard-card border-warning position-relative">
                 <div class="d-flex align-items-center">
@@ -24,7 +23,7 @@
             </div>
         </div>
 
-        <!-- Insumos en stock mínimo -->
+        
         <div class="col-xl-3 col-md-6">
             <div class="dashboard-card border-danger position-relative">
                 <div class="d-flex align-items-center">
@@ -38,7 +37,7 @@
             </div>
         </div>
 
-        <!-- Total de clientes -->
+        
         <div class="col-xl-3 col-md-6">
             <div class="dashboard-card border-info position-relative">
                 <div class="d-flex align-items-center">
@@ -61,21 +60,21 @@
                 <p class="text-secondary">Utiliza estos accesos para tus tareas más frecuentes.</p>
                 <div class="d-flex flex-wrap gap-3 mt-4">
 
-                    <!-- Gestionar pedidos -->
+                    
                     {% if perms.core.view_pedidos %}
                     <a href="{% url 'pedidos_list' %}" class="btn btn-lg btn-warning">
                         <i class="fas fa-list-check me-2"></i> Gestionar Pedidos
                     </a>
                     {% endif %}
 
-                    <!-- Crear presupuestos -->
+                    
                     {% if perms.core.add_presupuestos %}
                     <a href="{% url 'presupuestos_list' %}" class="btn btn-lg btn-info text-white">
                         <i class="fas fa-file-invoice-dollar me-2"></i> Crear Presupuesto
                     </a>
                     {% endif %}
 
-                    <!-- Agregar insumos -->
+                    
                     {% if perms.core.add_insumos %}
                     <a href="{% url 'insumos_list' %}" class="btn btn-lg btn-success text-white">
                         <i class="fas fa-plus me-2"></i> Añadir Stock
@@ -87,7 +86,7 @@
     </div>
 
     <div class="row mt-5">
-        <!-- Sección informativa -->
+        
         <div class="col-lg-6 mb-4">
             <div class="p-4" style="background-color: #1f1f1f; border-radius: 8px; border: 1px solid #333333; height: 320px;">
                 <h5 class="text-white mb-3">Resumen de Actividad</h5>
@@ -96,7 +95,7 @@
             </div>
         </div>
 
-        <!-- Sección de ayuda -->
+        
         <div class="col-lg-6 mb-4">
             <div class="p-4" style="background-color: #1f1f1f; border-radius: 8px; border: 1px solid #333333; height: 320px;">
                 <h5 class="text-white mb-3">Ayuda Rápida</h5>

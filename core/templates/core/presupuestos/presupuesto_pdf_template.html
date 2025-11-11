@@ -1,0 +1,156 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    padding: 25px;
+    font-size: 13px;
+    color: #2b2b2b;
+}
+
+.encabezado {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.logo-wrapper {
+    width: 180px; 
+}
+
+.logo {
+    width: 180px;
+    height: auto;
+}
+
+.logo-placeholder {
+    width: 180px;
+    height: 80px;
+}
+
+.datos-empresa {
+    text-align: right;
+    font-size: 13px;
+}
+
+
+.titulo {
+    text-align: center;
+    font-size: 26px;
+    font-weight: bold;
+    margin: 35px 0;
+}
+
+
+.datos-cliente {
+    margin-top: 30px;
+    font-size: 14px;
+}
+
+
+.tabla {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 25px;
+}
+
+.tabla th {
+    background-color: #616161;
+    color: white;
+    padding: 10px;
+    text-align: center;
+}
+
+.tabla td {
+    border: 1px solid #DDDDDD;
+    padding: 9px;
+    text-align: center;
+}
+
+
+.total {
+    text-align: right;
+    margin-top: 18px;
+    font-size: 17px;
+    font-weight: bold;
+}
+
+
+.condiciones {
+    font-size: 12px;
+    margin-top: 60px;
+    text-align: center;
+    line-height: 1.3em;
+}
+</style>
+</head>
+
+<body>
+
+
+<div class="encabezado">
+
+    <div class="logo-wrapper">
+        {% if config.logo %}
+            <img src="file:///{{ logo_path }}" class="logo">
+        {% else %}
+            <div class="logo-placeholder"></div>
+        {% endif %}
+    </div>
+
+    <div class="datos-empresa">
+        <strong>{{ config.nombre_empresa }}</strong><br>
+        {{ config.direccion }}<br>
+        WhatsApp: {{ config.telefono }}<br>
+        {{ config.email }}
+    </div>
+
+</div>
+
+<div class="titulo">PRESUPUESTO</div>
+
+
+<div class="datos-cliente">
+    <strong>Cliente:</strong> {{ presupuesto.id_cliente }}
+</div>
+
+
+<table class="tabla">
+    <thead>
+        <tr>
+            <th>Descripción</th>
+            <th>Cantidad</th>
+            <th>Precio Unitario</th>
+            <th>Total</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for t in trabajos %}
+        <tr>
+            <td style="text-align:left;">{{ t.nombre_trabajo }}</td>
+            <td>{{ t.cantidad }}</td>
+            <td>${{ t.precio_unitario|floatformat:2 }}</td>
+            <td><strong>${{ t.total_trabajo|floatformat:2 }}</strong></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+
+<div class="total">
+    Total presupuesto: ${{ total_general|floatformat:2 }}
+</div>
+
+
+<p class="condiciones">
+    {{ config.condiciones_pago|default:""|linebreaksbr }}
+</p>
+
+</body>
+</html>

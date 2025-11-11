@@ -10,7 +10,6 @@
 
     <div class="row g-4 mb-5">
         
-        <!-- Pedidos pendientes -->
         <div class="col-xl-3 col-md-6">
             <div class="dashboard-card border-warning position-relative">
                 <div class="d-flex align-items-center">
@@ -24,7 +23,6 @@
             </div>
         </div>
 
-        <!-- Ventas últimos 30 días -->
         <div class="col-xl-3 col-md-6">
             <div class="dashboard-card border-success position-relative">
                 <div class="d-flex align-items-center">
@@ -38,7 +36,6 @@
             </div>
         </div>
 
-        <!-- Insumos críticos -->
         <div class="col-xl-3 col-md-6">
             <div class="dashboard-card border-danger position-relative">
                 <div class="d-flex align-items-center">
@@ -52,7 +49,6 @@
             </div>
         </div>
 
-        <!-- Total de clientes -->
         <div class="col-xl-3 col-md-6">
             <div class="dashboard-card border-info position-relative">
                 <div class="d-flex align-items-center">
@@ -76,10 +72,12 @@
 
                         {% if caja_abierta %}
                             <h3 class="mb-0 text-success">Abierta</h3>
-                            <p class="text-info fw-bold mb-0 fs-5">💰 Saldo: ${{ saldo_actual|floatformat:2|intcomma }}</p>
+                            <p class="text-info fw-bold mb-0 fs-5"> Saldo: ${{ saldo_actual|floatformat:2|intcomma }}</p>
                         {% else %}
                             <h3 class="mb-0 text-danger">Cerrada</h3>
+                            <p class="text-secondary fw-bold mb-0 fs-6">Último saldo: ${{ saldo_actual|floatformat:2|intcomma }}</p>
                         {% endif %}
+
 
                     </div>
                 </div>
@@ -91,15 +89,15 @@
     </div> 
 
     <div class="row">
-        <!-- Gráfico de ventas -->
+        
         <div class="col-lg-8 mb-4">
             <div class="p-4" style="background-color: #1f1f1f; border-radius: 8px; border: 1px solid #333333; height: 400px;">
                 <h5 class="text-white mb-3">Gráfico de Ventas Mensuales</h5>
-                <p class="text-secondary">Aquí se integrará el gráfico principal (Ej. Chart.js)</p>
+                <p class="text-secondary">aqui van los graficos</p>
             </div>
         </div>
 
-        <!-- Pedidos recientes -->
+        
         <div class="col-lg-4 mb-4">
             <div class="p-4" style="background-color: #1f1f1f; border-radius: 8px; border: 1px solid #333333; height: 400px;">
                 <h5 class="text-white mb-3">Pedidos Recientes</h5>

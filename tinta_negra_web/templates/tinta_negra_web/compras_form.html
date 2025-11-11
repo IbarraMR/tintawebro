@@ -19,7 +19,6 @@
     <form method="post" id="formCompra">
         {% csrf_token %}
 
-        <!-- DATOS DE COMPRA -->
         <div class="card bg-dark text-white p-4 shadow-lg rounded-3 mt-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 class="fw-bold">Datos de la compra</h5>
@@ -57,12 +56,14 @@
             </div>
         </div>
 
-        <!-- DETALLE INSUMOS -->
+
         <div class="card bg-dark text-white p-4 shadow-lg rounded-3 mt-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 class="fw-bold">Detalle de Insumos</h5>
                 <button type="button" class="btn btn-primary btn-sm" id="add-row">➕ Agregar línea</button>
             </div>
+
+            {{ formset.management_form }}
 
             <table class="table table-dark table-hover align-middle rounded">
                 <thead class="table-secondary text-dark">
@@ -74,13 +75,11 @@
                         <th style="width: 80px;">Acciones</th>
                     </tr>
                 </thead>
-                {{ formset.management_form }}
+
                 <tbody id="detalle-body">
-                    {{ formset.management_form }}
 
                     {% for f in formset %}
                     <tr class="detalle-row">
-                        <!-- INSUMO -->
                         <td>
                             <div class="input-group">
                                 {{ f.insumo|add_class:"form-select detalle-insumo" }}
@@ -90,7 +89,6 @@
                         </td>
 
                         <td>{{ f.cantidad|add_class:"form-control detalle-cantidad" }}</td>
-
                         <td>{{ f.precio_unitario|add_class:"form-control detalle-precio" }}</td>
 
                         <td>
@@ -106,8 +104,9 @@
                         </td>
                     </tr>
                     {% endfor %}
-                </tbody>
 
+                </tbody>
+            </table>
 
             <h4 class="text-end mt-3">
                 Total: <span class="text-success fw-bold">$<span id="total-compra">0.00</span></span>
@@ -123,7 +122,7 @@
 </div>
 
 
-<!-- 🔥 TEMPLATE FORMSET VACÍO (fuera del formulario, fuera del tbody) -->
+<!-- TEMPLATE PARA AGREGAR FILAS -->
 <script type="text/template" id="formset-empty">
 <tr class="detalle-row">
     <td>
@@ -147,7 +146,6 @@
     </td>
 </tr>
 </script>
-
 
 
 {% include 'tinta_negra_web/modals/proveedor_modal.html' %}

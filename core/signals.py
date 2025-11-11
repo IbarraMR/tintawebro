@@ -12,7 +12,7 @@ def crear_usuario_empleado(sender, instance, created, **kwargs):
     if created and not instance.user:
         nombre_usuario = instance.email or instance.dni
         if not nombre_usuario:
-            return  # no se puede crear si no tiene email o DNI
+            return  
 
         password_temporal = "1234"
         user = User.objects.create(
@@ -23,7 +23,6 @@ def crear_usuario_empleado(sender, instance, created, **kwargs):
             password=make_password(password_temporal)
         )
 
-        # asignar grupo según el rol
         if instance.rol == "Jefe":
             grupo, _ = Group.objects.get_or_create(name="Jefe")
         else:
