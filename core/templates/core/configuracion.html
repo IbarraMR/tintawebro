@@ -1,8 +1,234 @@
-{% extends 'core/base.html' %}
+{% extends "core/base.html" %}
+{% load static %}
 
-{% block title %}Configuracion{% endblock %}
+{% block title %}Configuración{% endblock %}
 
 {% block content %}
-<h1>Página de Cconfiguracion</h1>
-<p>Contenido de ejemplo.</p>
+
+<style>
+    .tab-btn {
+        background-color: #2b2b2b;
+        border: 1px solid #444;
+        color: #fff;
+        padding: 6px 15px;
+        border-radius: 6px;
+        margin-right: 8px;
+        cursor: pointer;
+        font-size: 0.9rem;
+    }
+
+    .tab-btn.active {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+
+    .config-card {
+        background-color: #1e1e1e;
+        border: 1px solid #333;
+        border-radius: 6px;
+        padding: 20px;
+        color: #fff;
+    }
+
+    .config-card h5 {
+        border-bottom: 1px solid #444;
+        padding-bottom: 8px;
+        margin-bottom: 15px;
+        color: #ddd;
+    }
+
+    .form-control, .form-select {
+        background-color: #2a2a2a !important;
+        border: 1px solid #444 !important;
+        color: #fff !important;
+    }
+
+    .form-control:focus, .form-select:focus {
+        border-color: #0d6efd !important;
+        box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25);
+    }
+
+    label {
+        color: #ccc;
+        font-size: 0.9rem;
+        margin-bottom: 3px;
+    }
+
+    .btn-save {
+        background-color: #198754 !important;
+        border: none;
+        width: 100%;
+    }
+
+    .btn-save:hover {
+        background-color: #157347 !important;
+    }
+
+    .btn-warning-custom {
+        background-color: #ffc107 !important;
+        border: none;
+        width: 100%;
+    }
+
+    .btn-warning-custom:hover {
+        background-color: #e0a800 !important;
+    }
+</style>
+
+<div class="container mt-4">
+
+    <h3 class="text-white mb-3">
+        <i class="fas fa-cog me-2"></i> Configuración
+    </h3>
+
+    <!-- PRIMERA pestaña: Perfil -->
+    <div class="mb-3">
+        <button class="tab-btn active" onclick="openTab('perfilTab')" id="btnPerfil">Perfil de Usuario</button>
+        <button class="tab-btn" onclick="openTab('empresaTab')" id="btnEmpresa">Datos de Empresa</button>
+    </div>
+
+    <!-- ====================== PERFIL TAB ====================== -->
+    <div id="perfilTab" class="tab-content">
+
+        <div class="row">
+
+            <!-- Perfil -->
+            <div class="col-md-6">
+                <div class="config-card">
+
+                    <h5><i class="fas fa-user me-2"></i>Datos del Perfil</h5>
+
+                    <form action="{% url 'configuracion_perfil' %}" method="POST">
+                        {% csrf_token %}
+
+                        <label>Nombre</label>
+                        <input type="text" name="nombre" class="form-control mb-2" value="{{ empleado.nombre }}">
+
+                        <label>Apellido</label>
+                        <input type="text" name="apellido" class="form-control mb-2" value="{{ empleado.apellido }}">
+
+                        <label>Email</label>
+                        <input type="email" name="email" class="form-control mb-2" value="{{ empleado.email }}">
+
+                        <label>Teléfono</label>
+                        <input type="text" name="telefono" class="form-control mb-2" value="{{ empleado.telefono }}">
+
+                        <label>Dirección</label>
+                        <input type="text" name="direccion" class="form-control mb-2" value="{{ empleado.direccion }}">
+
+                        <button class="btn btn-primary w-100 mt-2">
+                            <i class="fas fa-save me-2"></i>Guardar Perfil
+                        </button>
+                    </form>
+
+                </div>
+            </div>
+
+            <!-- Contraseña -->
+            <div class="col-md-6">
+                <div class="config-card">
+
+                    <h5><i class="fas fa-lock me-2"></i>Cambiar Contraseña</h5>
+
+                    <form action="{% url 'configuracion_password' %}" method="POST">
+                        {% csrf_token %}
+
+                        <label>Contraseña actual</label>
+                        <input type="password" name="password_actual" class="form-control mb-2">
+
+                        <label>Nueva contraseña</label>
+                        <input type="password" name="password_nueva" class="form-control mb-2">
+
+                        <label>Confirmar nueva contraseña</label>
+                        <input type="password" name="password_confirm" class="form-control mb-3">
+
+                        <button class="btn btn-warning-custom">
+                            <i class="fas fa-key me-2"></i>Actualizar Contraseña
+                        </button>
+                    </form>
+
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- ====================== EMPRESA TAB ====================== -->
+    <div id="empresaTab" class="tab-content d-none">
+
+        <div class="config-card">
+
+            <h5><i class="fas fa-building me-2"></i>Datos de Empresa</h5>
+
+            <form action="{% url 'configuracion_empresa' %}" method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+
+                <div class="row">
+
+                    <div class="col-md-6 mb-3">
+                        <label>Nombre de la empresa</label>
+                        <input type="text" name="nombre_empresa" class="form-control" value="{{ empresa.nombre_empresa }}">
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label>Dirección</label>
+                        <input type="text" name="direccion" class="form-control" value="{{ empresa.direccion }}">
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label>Teléfono / WhatsApp</label>
+                        <input type="text" name="telefono" class="form-control" value="{{ empresa.telefono }}">
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label>Email</label>
+                        <input type="text" name="email" class="form-control" value="{{ empresa.email }}">
+                    </div>
+
+                    <div class="col-12 mb-3">
+                        <label>Condiciones / Texto legal del presupuesto</label>
+                        <textarea name="condiciones" rows="3" class="form-control">{{ empresa.condiciones }}</textarea>
+                    </div>
+
+                    <div class="col-12 mb-3">
+                        <label>Otros detalles</label>
+                        <textarea name="otros_detalles" rows="2" class="form-control">{{ empresa.otros_detalles }}</textarea>
+                    </div>
+
+                    <div class="col-12 mb-3">
+                        <label>Logo de la empresa</label>
+                        <input type="file" name="logo" class="form-control">
+
+                        {% if empresa.logo %}
+                            <small class="text-muted">Actualmente: {{ empresa.logo.url }}</small>
+                        {% endif %}
+                    </div>
+
+                </div>
+
+                <button class="btn btn-save mt-2">
+                    <i class="fas fa-save me-2"></i>Guardar cambios
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+function openTab(tabId) {
+    document.querySelectorAll(".tab-content").forEach(tab => tab.classList.add("d-none"));
+    document.getElementById(tabId).classList.remove("d-none");
+
+    document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
+    if (tabId === "empresaTab") document.getElementById("btnEmpresa").classList.add("active");
+    if (tabId === "perfilTab") document.getElementById("btnPerfil").classList.add("active");
+}
+
+</script>
+
 {% endblock %}

@@ -30,6 +30,11 @@
 <nav class="sidebar d-flex flex-column justify-content-between p-3"
      style="min-height: 100vh; width: 240px; background-color: #1c1c1c;">
 
+    <style>
+        .submenu-item { padding-left: 18px; font-size: 0.9rem; }
+        .submenu-item i { font-size: 0.75rem !important; }
+    </style>
+
     <div>
         <div class="sidebar-user text-white mb-3">
             <strong>Hola {{ request.user.username|title }}!</strong>
@@ -37,6 +42,7 @@
 
         <ul class="nav flex-column">
 
+            <!-- DASHBOARD -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'home' %}active{% endif %}"
                    href="{% url 'home' %}">
@@ -44,6 +50,7 @@
                 </a>
             </li>
 
+            <!-- CLIENTES -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'clientes_list' %}active{% endif %}"
                    href="{% url 'clientes_list' %}">
@@ -51,6 +58,7 @@
                 </a>
             </li>
 
+            <!-- PEDIDOS -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'pedidos_list' %}active{% endif %}"
                    href="{% url 'pedidos_list' %}">
@@ -58,20 +66,23 @@
                 </a>
             </li>
 
+            <!-- PRESUPUESTOS -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'presupuestos_list' %}active{% endif %}"
                    href="{% url 'presupuestos_list' %}">
                     <i class="fas fa-file-invoice-dollar me-2"></i> Presupuestos
                 </a>
             </li>
-            
+
+            <!-- PRODUCTOS -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'productos_list' %}active{% endif %}"
-                href="{% url 'productos_list' %}">
+                   href="{% url 'productos_list' %}">
                     <i class="fas fa-boxes me-2"></i> Productos
                 </a>
             </li>
 
+            <!-- COMPRAS -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'compras_list' %}active{% endif %}"
                    href="{% url 'compras_list' %}">
@@ -79,6 +90,7 @@
                 </a>
             </li>
 
+            <!-- INSUMOS -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'insumos_list' %}active{% endif %}"
                    href="{% url 'insumos_list' %}">
@@ -86,13 +98,43 @@
                 </a>
             </li>
 
+            <!-- ============= CAJA (SUBMENÚ SIEMPRE VISIBLE) ============= -->
             <li class="nav-item mb-1">
-                <a class="nav-link text-white {% if request.resolver_match.url_name == 'cajas_list' %}active{% endif %}"
-                   href="{% url 'cajas_list' %}">
-                    <i class="fas fa-cash-register me-2"></i> Caja
-                </a>
-            </li>
+                <span class="nav-link text-white">
+                    <i class="fas fa-cash-register fa-sm me-2"></i> Caja
+                </span>
 
+                <div id="submenuCajaSimple" style="margin-left: 12px;">
+
+                    <ul class="nav flex-column">
+
+                        <li class="nav-item submenu-item">
+                            <a class="nav-link text-white {% if request.resolver_match.url_name == 'cajas_list' %}active{% endif %}"
+                               href="{% url 'cajas_list' %}">
+                                <i class="fa-solid fa-folder-open fa-xs me-2"></i> Gestión de Caja
+                            </a>
+                        </li>
+
+                        <li class="nav-item submenu-item">
+                            <a class="nav-link text-white {% if request.resolver_match.url_name == 'movimientos_list' %}active{% endif %}"
+                               href="{% url 'movimientos_list' %}">
+                                <i class="fa-solid fa-money-bill-transfer fa-xs me-2"></i> Movimientos
+                            </a>
+                        </li>
+
+                        <li class="nav-item submenu-item">
+                            <a class="nav-link text-white {% if request.resolver_match.url_name == 'formas_pago_list' %}active{% endif %}"
+                               href="{% url 'formas_pago_list' %}">
+                                <i class="fa-solid fa-credit-card fa-xs me-2"></i> Formas de Pago
+                            </a>
+                        </li>
+
+                    </ul>
+                </div>
+            </li>
+            <!-- ============= FIN CAJA ============= -->
+
+            <!-- PROVEEDORES -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'proveedores_list' %}active{% endif %}"
                    href="{% url 'proveedores_list' %}">
@@ -100,6 +142,7 @@
                 </a>
             </li>
 
+            <!-- EMPLEADOS -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'empleados_list' %}active{% endif %}"
                    href="{% url 'empleados_list' %}">
@@ -107,12 +150,14 @@
                 </a>
             </li>
 
+            <!-- CONFIGURACIÓN -->
             <li class="nav-item mb-1">
-                <a class="nav-link text-white {% if request.resolver_match.url_name == 'configuracion_empresa' %}active{% endif %}"
-                   href="{% url 'configuracion_empresa' %}">
+                <a class="nav-link text-white {% if request.resolver_match.url_name == 'configuracion' %}active{% endif %}"
+                href="{% url 'configuracion' %}">
                     <i class="fas fa-cogs me-2"></i> Configuración
                 </a>
             </li>
+
 
         </ul>
     </div>
@@ -136,6 +181,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     const toastElList = document.querySelectorAll('.toast');

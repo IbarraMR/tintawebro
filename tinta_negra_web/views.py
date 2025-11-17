@@ -40,10 +40,17 @@ from core.models import (
     EstadosPedidos, FormaPago, Insumos, MovimientosCaja, Pedidos, 
     PedidosInsumos, Presupuestos, PresupuestosInsumos,UnidadMedida, Proveedores,
     StockMovimientos, Productos, ProductosInsumos,ConfiguracionEmpresa, ConfiguracionEmail,
-    PresupuestosProductos, Trabajo, TrabajoInsumo, TiposProducto, 
+    PresupuestosProductos, Trabajo, TrabajoInsumo, TiposProducto, FormaPago,
     Proveedores as Proveedor
 ) 
 from core.utils_caja import registrar_movimiento
+import io, base64
+from django.db.models.functions import TruncDay, TruncWeek, TruncMonth, TruncYear
+from datetime import datetime, timedelta
+from django.db import models
+from django.db.models import F
+
+
 # ----------------------------------------------------------------------
 # CONTROL DE ACCESO
 # ----------------------------------------------------------------------
@@ -75,37 +82,60 @@ def register_user(request):
 @login_required
 def home(request):
 
+    # ----- CAJA -----
     ultima_caja = Cajas.objects.order_by("-id_caja").first()
-
     caja_abierta = False
-    saldo_actual = None
+    saldo_actual = 0
 
     if ultima_caja:
         caja_abierta = not ultima_caja.caja_cerrada
         saldo_actual = ultima_caja.saldo_sistema if caja_abierta else ultima_caja.saldo_final
 
+    # ----- PEDIDOS PENDIENTES (no entregados ni cancelados) -----
+    pedidos_pendientes = Pedidos.objects.exclude(
+        id_estado__nombre_estado__in=["ENTREGADO", "CANCELADO"]
+    ).select_related("id_cliente").order_by("-id_pedido")
+
+    pedidos_pendientes_count = pedidos_pendientes.count()
+
+    # ----- PEDIDOS RECIENTES (últimos 5) -----
+    pedidos_recientes = Pedidos.objects.select_related(
+        "id_cliente", "id_estado"
+    ).order_by("-id_pedido")[:5]
+
+    # ----- INSUMOS EN STOCK MÍNIMO -----
+    insumos_criticos = Insumos.objects.filter(
+        stock_actual__lte=F("stock_minimo")
+    ).order_by("stock_actual")
+
+    insumos_criticos_count = insumos_criticos.count()
+
+    # ----- PERMISOS -----
     es_duenio = request.user.groups.filter(name='Jefe').exists()
     es_empleado = request.user.groups.filter(name='Empleados').exists()
 
     context = {
-        'pedidos_pendientes_count': 0,
-        'ventas_30_dias': 0,
-        'insumos_criticos_count': 0,
-        'clientes_total_count': Cliente.objects.count(),
+        "caja": ultima_caja,
+        "caja_abierta": caja_abierta,
+        "saldo_actual": saldo_actual,
 
-        'caja': ultima_caja,
-        'caja_abierta': caja_abierta,
-        'saldo_actual': saldo_actual,
+        "pedidos_pendientes": pedidos_pendientes,
+        "pedidos_pendientes_count": pedidos_pendientes_count,
+        "pedidos_recientes": pedidos_recientes,
 
-        'es_duenio': es_duenio,
-        'es_empleado': es_empleado,
-        'puede_ver_caja': es_duenio or es_empleado,
+        "insumos_criticos": insumos_criticos,
+        "insumos_criticos_count": insumos_criticos_count,
+
+        "es_duenio": es_duenio,
+        "es_empleado": es_empleado,
+        "puede_ver_caja": es_duenio or es_empleado,
     }
 
     if es_empleado:
-        return render(request, 'core/home_empleado.html', context)
+        return render(request, "core/home_empleado.html", context)
 
-    return render(request, 'core/home.html', context)
+    return render(request, "core/home.html", context)
+
 
 
 
@@ -611,25 +641,32 @@ def agregar_insumo_presupuesto(request, presupuesto_id):
 def cajas_list(request):
     empleado = Empleados.objects.filter(user=request.user).first()
 
-    caja = None
-    lista_cajas = Cajas.objects.none()  # default
+    caja_actual = None
+    lista_cajas = Cajas.objects.none()
 
     if empleado:
-        caja = Cajas.objects.filter(id_empleado=empleado, caja_cerrada=False).order_by('-id_caja').first()
-        lista_cajas = Cajas.objects.filter(id_empleado=empleado).order_by('-id_caja')
+        caja_actual = Cajas.objects.filter(
+            id_empleado=empleado,
+            caja_cerrada=False
+        ).order_by('-id_caja').first()
+
+        lista_cajas = Cajas.objects.filter(
+            id_empleado=empleado
+        ).order_by('-id_caja')
+
     paginator = Paginator(lista_cajas, 15)
     page_number = request.GET.get("page")
     cajas = paginator.get_page(page_number)
 
     cierre_info = request.session.pop("cierre_info", None)
-    list(messages.get_messages(request))
 
     return render(request, 'core/caja/cajas_list.html', {
-        'caja': caja,
-        'cajas': cajas,         
+        'caja': caja_actual,
+        'cajas': cajas,
         'cierre_info': cierre_info,
-        'page_obj': cajas,      
+        'page_obj': cajas, 
     })
+
 
 @never_cache
 @login_required
@@ -727,48 +764,97 @@ def cerrar_caja_view(request):
 def detalle_caja_view(request, id):
     caja = get_object_or_404(Cajas, id_caja=id)
     movimientos = MovimientosCaja.objects.filter(caja=caja).order_by('-fecha_hora')
-    return render(request, 'core/caja/detalle_caja.html', {'caja': caja, 'movimientos': movimientos})
+    return render(request, 'core/caja/detalle_caja.html', {
+        'caja': caja,
+        'movimientos': movimientos,
+    })
 
 # ----------------------------------------------------------------------
 # MOVIMIENTOS CAJA
 # ----------------------------------------------------------------------
 
-@never_cache
+@require_POST
 @login_required
-@permission_required('core.add_movimientoscaja', raise_exception=True)
 def movimiento_create(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Método no permitido"}, status=405)
 
-    form = MovimientoCajaForm(request.POST)
-    if not form.is_valid():
-        return JsonResponse({"error": "Datos inválidos"}, status=400)
+    # --- Obtener empleado actual ---
+    empleado = Empleados.objects.filter(user=request.user).first()
+    if not empleado:
+        return JsonResponse({"error": "Empleado no encontrado"}, status=400)
 
-    cd = form.cleaned_data
-    mov, err = registrar_movimiento(
-        request,
-        tipo=cd["tipo"],
-        forma_pago_id=cd["forma_pago"].id_forma if cd.get("forma_pago") else None,
-        monto=cd["monto"],
-        descripcion=cd["descripcion"],
-        origen=getattr(MovimientosCaja.Origen, 'MANUAL', None),
+    # --- Caja abierta ---
+    caja_abierta = Cajas.objects.filter(id_empleado=empleado, caja_cerrada=False).first()
+    if not caja_abierta:
+        return JsonResponse({"error": "No hay una caja abierta para registrar movimientos"}, status=400)
+
+    # --- Datos del formulario ---
+    tipo = request.POST.get("tipo")
+    forma_pago_id = request.POST.get("forma_pago")
+    descripcion = request.POST.get("descripcion", "").strip()
+
+    # --- Validación tipo ---
+    if tipo not in ["INGRESO", "EGRESO"]:
+        return JsonResponse({"error": "Tipo de movimiento inválido"}, status=400)
+
+    # --- Validación monto ---
+    try:
+        monto = Decimal(request.POST.get("monto").replace(",", "."))
+        if monto <= 0:
+            raise ValueError
+    except:
+        return JsonResponse({"error": "Monto inválido"}, status=400)
+
+    # --- Validación forma de pago ---
+    try:
+        forma_pago = FormaPago.objects.get(id_forma=forma_pago_id)
+    except FormaPago.DoesNotExist:
+        return JsonResponse({"error": "Forma de pago inválida"}, status=400)
+
+    # --- Calcular nuevo saldo ---
+    saldo_actual = caja_abierta.saldo_sistema  # ES DECIMAL
+
+    if tipo == "INGRESO":
+        nuevo_saldo = saldo_actual + monto
+    else:
+        nuevo_saldo = saldo_actual - monto
+
+    # --- Crear movimiento ---
+    movimiento = MovimientosCaja.objects.create(
+        caja=caja_abierta,
+        fecha_hora=timezone.now(),
+        tipo=tipo,
+        forma_pago=forma_pago,
+        monto=monto,
+        descripcion=descripcion,
+        origen=MovimientosCaja.Origen.MANUAL,
+        creado_por=empleado,
+        saldo_resultante=nuevo_saldo,
     )
-    if err:
-        return JsonResponse({"error": err}, status=400)
 
+    # --- Auditoría ---
+    AuditoriaCaja.objects.create(
+        caja=caja_abierta,
+        movimiento=movimiento,
+        usuario=request.user,
+        accion=AuditoriaCaja.Accion.MOV_ALTA,
+        detalle=f"Movimiento manual: {tipo} ${monto}",
+        ip=request.META.get("REMOTE_ADDR"),
+    )
+
+    # --- Respuesta JSON ---
     return JsonResponse({
         "success": True,
         "mov": {
-            "id": mov.id,
-            "fecha_hora": mov.fecha_hora.strftime("%d/%m/%Y %H:%M"),
-            "tipo": getattr(mov, 'get_tipo_display', lambda: mov.tipo)(),
-            "monto": f"{mov.monto:,.2f}",
-            "descripcion": mov.descripcion,
-            "caja": mov.caja.id_caja
-        },
-        "saldoActualizado": f"{getattr(mov, 'saldo_resultante', 0):,.2f}"
+            "id": movimiento.id,
+            "fecha_hora": movimiento.fecha_hora.strftime("%d/%m/%Y %H:%M"),
+            "tipo": movimiento.get_tipo_display(),
+            "monto": str(movimiento.monto),
+            "forma_pago": movimiento.forma_pago.nombre,
+            "descripcion": movimiento.descripcion,
+            "caja": caja_abierta.id_caja,
+            "empleado": f"{empleado.nombre} {empleado.apellido or ''}",
+        }
     })
-
 # ----------------------------------------------------------------------
 # FORMAS DE PAGO
 # ----------------------------------------------------------------------
@@ -1079,9 +1165,14 @@ def presupuesto_set_cliente(request, presupuesto_id):
 
 @never_cache
 @login_required
-@permission_required('core.view_configuracion', raise_exception=True)
 def configuracion(request):
-    return render(request, 'core/configuracion.html', {'configuracion': []})
+    return render(request, 'core/configuracion.html', {
+        "empleado": Empleados.objects.filter(user=request.user).first(),
+        "empresa": ConfiguracionEmpresa.objects.first(),
+        "email_cfg": ConfiguracionEmail.objects.first(),
+    })
+
+
 
 
 @login_required
@@ -1487,22 +1578,33 @@ def presupuesto_edit(request, presupuesto_id):
 
 
 
-
-
 @login_required
 def configuracion_empresa(request):
-    config = ConfiguracionEmpresa.objects.first()
-    if not config:
-        config = ConfiguracionEmpresa.objects.create()
+    empresa = ConfiguracionEmpresa.objects.first()
+
+    if not empresa:
+        empresa = ConfiguracionEmpresa.objects.create()
+
     if request.method == "POST":
-        form = ConfiguracionEmpresaForm(request.POST, request.FILES, instance=config)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "Configuración guardada ✅")
-            return redirect("configuracion_empresa")
-    else:
-        form = ConfiguracionEmpresaForm(instance=config)
-    return render(request, "core/configuracion_empresa.html", {"form": form})
+        empresa.nombre_empresa = request.POST.get("nombre_empresa")
+        empresa.direccion = request.POST.get("direccion")
+        empresa.telefono = request.POST.get("telefono")
+        empresa.email = request.POST.get("email")
+        empresa.condiciones = request.POST.get("condiciones")
+        empresa.otros_detalles = request.POST.get("otros_detalles")
+
+        if request.FILES.get("logo"):
+            empresa.logo = request.FILES["logo"]
+
+        empresa.save()
+        messages.success(request, "Datos de empresa guardados correctamente.")
+        return redirect("configuracion") 
+
+    return render(request, "core/configuracion.html", {
+        "empresa": empresa,
+        "empleado": Empleados.objects.filter(user=request.user).first(),
+        "email_cfg": ConfiguracionEmail.objects.first(),
+    })
 
 
 
@@ -1978,27 +2080,29 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
     except EstadosPedidos.DoesNotExist:
         return JsonResponse({"error": "Estado inválido"}, status=400)
 
-    # Guardamos el estado anterior
     estado_anterior = pedido.id_estado.nombre_estado if pedido.id_estado else None
 
+    from django.utils import timezone
     from core.models import TrabajoInsumo, StockMovimientos, Trabajo
 
-    # ----------------------------------------------------------------------
-    # 🔥 SI PASA A "ENTREGADO": no tocar stock, solo actualizar estado
-    # ----------------------------------------------------------------------
+    # =====================================================================
+    # 🔥 1) ENTREGADO → Guardar fecha_entrega_real y NO tocar stock
+    # =====================================================================
     if nuevo_estado == "ENTREGADO":
+        pedido.fecha_entrega_real = timezone.now().date()
         pedido.id_estado = estado
         pedido.save()
 
         return JsonResponse({
             "success": True,
-            "nuevo_estado": estado.nombre_estado
+            "nuevo_estado": estado.nombre_estado,
+            "fecha_entrega_real": pedido.fecha_entrega_real.strftime("%d/%m/%Y")
         })
 
-    # ----------------------------------------------------------------------
-    # 🔥 SI PASA A "EN PRODUCCIÓN": descuento YA se hizo al crear el pedido.
-    # Solo marcamos el estado (NO tocamos stock)
-    # ----------------------------------------------------------------------
+    # =====================================================================
+    # 🔥 2) EN PRODUCCIÓN → Solo actualizar estado
+    # (el stock ya fue descontado al crear el pedido)
+    # =====================================================================
     if nuevo_estado == "EN PRODUCCIÓN":
         pedido.id_estado = estado
         pedido.save()
@@ -2009,9 +2113,9 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
             "nota": "Stock ya estaba descontado al confirmar presupuesto."
         })
 
-    # ----------------------------------------------------------------------
-    # 🔥 SI PASA A "CANCELADO": DEVOLVER STOCK (pero solo si antes se descontó)
-    # ----------------------------------------------------------------------
+    # =====================================================================
+    # 🔥 3) CANCELADO → devolver stock (si ya había sido descontado)
+    # =====================================================================
     if nuevo_estado == "CANCELADO":
 
         if not pedido.stock_descontado:
@@ -2021,11 +2125,7 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
                 "nota": "No se devolvió stock porque nunca fue descontado."
             })
 
-        # Recuperamos los trabajos originales del presupuesto
-        trabajos = Trabajo.objects.filter(presupuesto=pedido.id_cliente.presupuestos_set.first())
-
-        # 🛠 PERO: como es complejo ir por el presupuesto original,
-        # mejor recuperamos los insumos del pedido directamente (más seguro)
+        # Recuperar insumos usados en el pedido
         detalles = pedido.detalles.all()
 
         for det in detalles:
@@ -2033,15 +2133,14 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
             insumo = det.insumo
             factor = float(insumo.factor_conversion or 1)
 
-            # Cantidad REAL devuelta → lo mismo que se descontó
+            # cantidad REAL usada → igual a la descontada
             cantidad_real = float(det.cantidad) / factor
 
-            # Devolver stock
+            # devolver stock
             stock_antes = float(insumo.stock_actual or 0)
             insumo.stock_actual = stock_antes + cantidad_real
             insumo.save()
 
-            # Registrar movimiento
             StockMovimientos.objects.create(
                 insumo=insumo,
                 tipo="entrada",
@@ -2059,9 +2158,9 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
             "stock_devuelto": True
         })
 
-    # ----------------------------------------------------------------------
-    # 🔥 default (no debería llegar)
-    # ----------------------------------------------------------------------
+    # =====================================================================
+    # 🔥 4) Default (no debería usarse)
+    # =====================================================================
     pedido.id_estado = estado
     pedido.save()
 
@@ -2299,3 +2398,152 @@ def agregar_producto_presupuesto(request, presupuesto_id):
 
     return JsonResponse({"ok": True, "tabla": html, "total": tot})
 
+
+
+
+@login_required
+def api_grafico_ventas(request):
+    filtro = request.GET.get("filtro", "mensual")
+    qs = Pedidos.objects.filter(
+        id_estado__nombre_estado="ENTREGADO",
+        fecha_entrega_real__isnull=False
+    )
+
+    if filtro == "diario":
+        datos = (
+            qs.annotate(dia=TruncDay("fecha_entrega_real"))
+              .values("dia")
+              .annotate(total=Sum("total_pedido"))
+              .order_by("dia")
+        )
+
+        labels = [d["dia"].strftime("%d/%m") for d in datos]
+        valores = [float(d["total"]) for d in datos]
+
+        return JsonResponse({"labels": labels, "valores": valores})
+
+    if filtro == "mensual":
+        datos = (
+            qs.annotate(mes=TruncMonth("fecha_entrega_real"))
+              .values("mes")
+              .annotate(total=Sum("total_pedido"))
+              .order_by("mes")
+        )
+
+        labels = [d["mes"].strftime("%m/%Y") for d in datos]
+        valores = [float(d["total"]) for d in datos]
+
+        return JsonResponse({"labels": labels, "valores": valores})
+
+    if filtro == "anual":
+        datos = (
+            qs.annotate(anio=TruncYear("fecha_entrega_real"))
+              .values("anio")
+              .annotate(total=Sum("total_pedido"))
+              .order_by("anio")
+        )
+
+        labels = [str(d["anio"].year) for d in datos]
+        valores = [float(d["total"]) for d in datos]
+
+        return JsonResponse({"labels": labels, "valores": valores})
+
+    return JsonResponse({"labels": [], "valores": []})
+
+
+@login_required
+def movimientos_list(request):
+    empleado = Empleados.objects.filter(user=request.user).first()
+
+    # Traer formas de pago ( NECESARIO para el modal )
+    formas_pago = FormaPago.objects.all().order_by('nombre')
+
+    # Filtros
+    q = request.GET.get("q", "")
+    fecha_desde = request.GET.get("desde", "")
+    fecha_hasta = request.GET.get("hasta", "")
+    filtro_forma_pago = request.GET.get("forma_pago", "")
+
+    movimientos = MovimientosCaja.objects.all().order_by("-fecha_hora")
+
+    if q:
+        movimientos = movimientos.filter(
+            Q(descripcion__icontains=q) |
+            Q(id__icontains=q)
+        )
+
+    if fecha_desde:
+        movimientos = movimientos.filter(fecha_hora__date__gte=fecha_desde)
+
+    if fecha_hasta:
+        movimientos = movimientos.filter(fecha_hora__date__lte=fecha_hasta)
+
+    if filtro_forma_pago:
+        movimientos = movimientos.filter(forma_pago_id=filtro_forma_pago)
+
+    # Paginación
+    paginator = Paginator(movimientos, 20)
+    page = request.GET.get("page")
+    movs = paginator.get_page(page)
+
+    contexto = {
+        "movs": movs,
+        "formas_pago": formas_pago,        # ⬅⬅⬅ IMPORTANTE!!
+        "filtro_busqueda": q,
+        "filtro_fecha_desde": fecha_desde,
+        "filtro_fecha_hasta": fecha_hasta,
+        "filtro_forma_pago": filtro_forma_pago,
+    }
+
+    return render(request, "core/caja/movimientos_list.html", contexto)
+
+
+
+@login_required
+def configuracion_perfil(request):
+    empleado = Empleados.objects.filter(user=request.user).first()
+
+    if not empleado:
+        messages.error(request, "No se encontró el perfil del usuario.")
+        return redirect("configuracion")
+
+    if request.method == "POST":
+        empleado.nombre = request.POST.get("nombre")
+        empleado.apellido = request.POST.get("apellido")
+        empleado.email = request.POST.get("email")
+        empleado.telefono = request.POST.get("telefono")
+        empleado.direccion = request.POST.get("direccion")
+        empleado.save()
+
+        messages.success(request, "Perfil actualizado correctamente.")
+        return redirect("configuracion")
+
+    return redirect("configuracion")
+
+
+
+@login_required
+def configuracion_password(request):
+
+    if request.method == "POST":
+        user = request.user
+
+        actual = request.POST.get("password_actual")
+        nueva = request.POST.get("password_nueva")
+        confirm = request.POST.get("password_confirm")
+
+        if not user.check_password(actual):
+            messages.error(request, "La contraseña actual es incorrecta.")
+            return redirect("configuracion")
+
+        if nueva != confirm:
+            messages.error(request, "Las contraseñas no coinciden.")
+            return redirect("configuracion")
+
+        user.set_password(nueva)
+        user.save()
+
+        messages.success(request, "Contraseña actualizada correctamente.")
+        return redirect("login")
+
+    return redirect("configuracion")
