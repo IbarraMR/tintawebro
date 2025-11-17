@@ -1,6 +1,8 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import modelformset_factory
+from django.utils import timezone
+
 
 from .models import (
     Cliente,
@@ -16,6 +18,7 @@ from .models import (
     Presupuestos,
     ConfiguracionEmpresa,
     ConfiguracionEmail,
+    Productos,
     
 
 )
@@ -274,7 +277,33 @@ class PresupuestoForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["id_cliente"].queryset = Cliente.objects.order_by("apellido", "nombre")
+
+        self.fields["id_cliente"].queryset = Cliente.objects.order_by("nombre")
+        if not self.is_bound: 
+            if not self.instance.pk or not self.instance.fecha_emision:
+                self.initial.setdefault("fecha_emision", timezone.localdate())
+
+    def clean_fecha_emision(self):
+        fecha = self.cleaned_data.get("fecha_emision")
+        hoy = timezone.localdate()
+        if fecha and fecha < hoy:
+            raise ValidationError("La fecha de emisión no puede ser anterior a hoy.")
+        return fecha
+
+    def clean(self):
+        cleaned = super().clean()
+        fecha_emision = cleaned.get("fecha_emision")
+        fecha_vencimiento = cleaned.get("fecha_vencimiento")
+
+        if fecha_emision and fecha_vencimiento:
+            if fecha_vencimiento <= fecha_emision:
+                self.add_error(
+                    "fecha_vencimiento",
+                    "La fecha de vencimiento debe ser posterior a la fecha de emisión."
+                )
+
+        return cleaned
+
 
 
 class ConfiguracionEmpresaForm(forms.ModelForm):
@@ -296,4 +325,15 @@ class ConfiguracionEmailForm(forms.ModelForm):
             "smtp_host": forms.TextInput(attrs={"class": "form-control"}),
             "smtp_port": forms.NumberInput(attrs={"class": "form-control"}),
             "usar_tls": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+
+class ProductoForm(forms.ModelForm):
+    class Meta:
+        model = Productos
+        fields = ["nombre", "descripcion", "tipo", "precio"]
+        widgets = {
+            "nombre": forms.TextInput(attrs={"class": "form-control"}),
+            "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "precio": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
         }

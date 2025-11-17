@@ -1,50 +1,357 @@
 {% extends 'core/base.html' %}
 {% load static %}
+{% load custom_filters %}
 
-{% block title %}{{ title }}{% endblock %}
+{% block title %}{{ title|default:"Producto" }}{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="text-white">{{ title }}</h2>
-    <a href="{% url 'productos_list' %}" class="btn btn-secondary">
-        <i class="fas fa-arrow-left me-2"></i> Volver al Listado
-    </a>
-</div>
+<div class="container mt-4">
 
-<div class="card p-4 mx-auto" style="max-width: 700px; background-color: #1f1f1f; border: 1px solid #333333;">
-    <form method="post">
-        {% csrf_token %}
-        
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
+  <h2 class="text-white mb-3">{{ title|default:"Producto" }}</h2>
+  {% include "core/partials/toasts.html" %}
 
-        {% if form.non_field_errors %}
-            <div class="alert alert-danger">
-                Todos los campos son obligatorios.
-            </div>
-        {% endif %}
+  <form method="post" id="formProducto">
+    {% csrf_token %}
 
-        {% for field in form %}
-        <div class="mb-3">
-            <label class="form-label text-white">{{ field.label }} <span class="text-danger">*</span></label>
-            {{ field }}
-            {% if field.errors %}
-            <div class="text-danger small">{{ field.errors }}</div>
+    {% if producto %}
+      <input type="hidden" name="producto_id" value="{{ producto.id_producto }}">
+    {% endif %}
+
+    <input type="hidden" name="precio" id="precio_hidden"
+           value="{{ producto.precio|default:'0.00'|floatformat:2 }}">
+
+    <div class="row mt-2">
+      <div class="col-md-6 mb-3">
+        <label class="form-label text-white">Nombre del producto</label>
+        <input type="text"
+               name="nombre"
+               id="nombre"
+               class="form-control"
+               required
+               value="{{ producto.nombre|default:'' }}">
+      </div>
+
+      <div class="col-md-6 mb-3">
+        <label class="form-label text-white">Tipo de producto</label>
+
+        {% with tipo_actual=producto.tipo.nombre_tipo|default_if_none:"" %}
+        <select id="tipoProducto" name="tipo" class="form-select" required>
+          <option value="">Seleccione...</option>
+
+          <option value="personalizado"
+            {% if tipo_actual|lower == "personalizado" %}selected{% endif %}>
+            Personalizado
+          </option>
+
+          <option value="tercerizado"
+            {% if tipo_actual|lower == "tercerizado" %}selected{% endif %}>
+            Tercerizado
+          </option>
+        </select>
+        {% endwith %}
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label text-white">Descripción</label>
+      <textarea id="descripcion"
+                name="descripcion"
+                class="form-control"
+                rows="2">{{ producto.descripcion|default_if_none:"" }}</textarea>
+    </div>
+
+    <div id="camposPersonalizado" class="row mt-3 d-none">
+      <div class="col-md-4 mb-3">
+        <label class="form-label text-white">Costo de diseño ($)</label>
+        <input type="number"
+               id="costo_diseno"
+               name="costo_diseno"
+               class="form-control"
+               min="0"
+               step="0.01"
+               value="{{ producto.costo_diseno|default:'0' }}">
+      </div>
+
+      <div class="col-md-4 mb-3">
+        <label class="form-label text-white">Margen de ganancia (%)</label>
+        <input type="number"
+               id="margen"
+               name="margen"
+               class="form-control"
+               min="0"
+               max="100"
+               step="1"
+               value="{{ producto.margen_ganancia|default:'0' }}">
+      </div>
+
+      <div class="col-md-4 mb-3">
+        <label class="form-label text-white">Precio final ($)</label>
+        <input type="number"
+               id="precio_personalizado"
+               class="form-control"
+               readonly
+               step="0.01"
+               value="{{ producto.precio|default:'0.00'|floatformat:2 }}">
+      </div>
+    </div>
+
+    <div id="camposTercerizado" class="row mt-3 d-none">
+      <div class="col-md-4 mb-3">
+        <label class="form-label text-white">Costo inicial ($)</label>
+        <input type="number"
+               id="costo_inicial"
+               name="costo_inicial"
+               class="form-control"
+               min="0"
+               step="0.01"
+               value="{{ producto.costo_inicial|default:'0' }}">
+      </div>
+
+      <div class="col-md-4 mb-3">
+        <label class="form-label text-white">Margen de ganancia (%)</label>
+        <input type="number"
+               id="margen_terc"
+               name="margen_terc"
+               class="form-control"
+               min="0"
+               max="100"
+               step="1"
+               value="{{ producto.margen_ganancia|default:'0' }}">
+      </div>
+
+      <div class="col-md-4 mb-3">
+        <label class="form-label text-white">Precio final ($)</label>
+        <input type="number"
+               id="precio_terc"
+               class="form-control"
+               readonly
+               step="0.01"
+               value="{{ producto.precio|default:'0.00'|floatformat:2 }}">
+      </div>
+    </div>
+
+    <div id="insumosContainer" class="mt-4 d-none">
+      <div class="seccion-insumos">
+        <h4 class="text-white">Insumos del producto</h4>
+
+        <table class="table table-dark table-bordered mt-2">
+          <thead>
+            <tr>
+              <th>Insumo</th>
+              <th>Cantidad</th>
+              <th>Costo unit.</th>
+              <th>Subtotal</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+
+          <tbody id="insumos-body">
+            {% if producto_insumos %}
+              {% for pi in producto_insumos %}
+              <tr>
+                <td>
+                  <select class="form-select insumo-select" name="insumo[]">
+                    <option value="">Seleccione...</option>
+                    {% for ins in insumos %}
+                    <option value="{{ ins.id_insumo }}"
+                            data-costo="{{ ins.precio_costo_unitario }}"
+                            data-factor="{{ ins.factor_conversion }}"
+                            {% if ins.id_insumo == pi.insumo.id_insumo %}selected{% endif %}>
+                      {{ ins.nombre }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </td>
+
+                <td>
+                  <input type="number"
+                         class="form-control cantidad"
+                         name="cantidad[]"
+                         min="1"
+                         step="1"
+                         value="{{ pi.cantidad }}">
+                </td>
+
+                <td><input type="text" class="form-control costo-unitario" disabled></td>
+                <td><input type="text" class="form-control subtotal-input" disabled></td>
+                <td><button type="button" class="btn btn-danger btn-sm borrar">X</button></td>
+              </tr>
+              {% endfor %}
             {% endif %}
-        </div>
-        {% endfor %}
+          </tbody>
+        </table>
 
-        <div class="text-end">
-            <button type="submit" class="btn btn-success">
-                <i class="fas fa-save me-2"></i> Guardar Producto
-            </button>
-        </div>
-    </form>
+        <button type="button" class="btn btn-primary" id="addInsumo">+ Agregar insumo</button>
+        <p class="text-white mt-2">
+          Subtotal insumos: $ <span id="subtotalInsumos">0.00</span>
+        </p>
+      </div>
+    </div>
+
+    <hr class="text-secondary my-4">
+
+    <div class="d-flex justify-content-end gap-2">
+      <button type="reset" class="btn btn-warning">Limpiar</button>
+      <button type="submit" class="btn btn-success">
+        <i class="fas fa-save me-2"></i> Guardar producto
+      </button>
+      <a href="{% url 'productos_list' %}" class="btn btn-secondary">Cancelar</a>
+    </div>
+
+  </form>
 </div>
+
+<style>
+  .disabled-section {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+</style>
+
+<script>
+
+let insumosData = [
+  {% for ins in insumos %}
+  {
+    id: "{{ ins.id_insumo }}",
+    nombre: "{{ ins.nombre|escapejs }}",
+    costo: "{{ ins.precio_costo_unitario }}",
+    factor: "{{ ins.factor_conversion }}"
+  }{% if not forloop.last %},{% endif %}
+  {% endfor %}
+];
+
+const tipoSelect = document.getElementById("tipoProducto");
+const camposPersonalizado = document.getElementById("camposPersonalizado");
+const camposTercerizado = document.getElementById("camposTercerizado");
+const insumosContainer = document.getElementById("insumosContainer");
+const tbody = document.getElementById("insumos-body");
+const subtotalInsumosSpan = document.getElementById("subtotalInsumos");
+const precioHidden = document.getElementById("precio_hidden");
+const precioPers = document.getElementById("precio_personalizado");
+const precioTerc = document.getElementById("precio_terc");
+
+function actualizarVisibilidad() {
+  const tipo = tipoSelect.value.toLowerCase();
+
+  if (tipo === "personalizado") {
+    camposPersonalizado.classList.remove("d-none");
+    camposTercerizado.classList.add("d-none");
+    insumosContainer.classList.remove("d-none");
+
+  } else if (tipo === "tercerizado") {
+    camposPersonalizado.classList.add("d-none");
+    camposTercerizado.classList.remove("d-none");
+    insumosContainer.classList.add("d-none");
+
+  } else {
+    camposPersonalizado.classList.add("d-none");
+    camposTercerizado.classList.add("d-none");
+    insumosContainer.classList.add("d-none");
+  }
+}
+
+tipoSelect.addEventListener("change", actualizarVisibilidad);
+
+document.getElementById("addInsumo").addEventListener("click", () => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td>
+      <select class="form-select insumo-select" name="insumo[]">
+        <option value="">Seleccione...</option>
+        ${insumosData.map(i => `
+          <option value="${i.id}" data-costo="${i.costo}" data-factor="${i.factor}">
+            ${i.nombre}
+          </option>`).join("")}
+      </select>
+    </td>
+    <td>
+      <input type="number" class="form-control cantidad" name="cantidad[]"
+             min="1" step="1" value="1">
+    </td>
+    <td><input type="text" class="form-control costo-unitario" disabled></td>
+    <td><input type="text" class="form-control subtotal-input" disabled></td>
+    <td><button type="button" class="btn btn-danger btn-sm borrar">X</button></td>
+  `;
+  tbody.appendChild(tr);
+});
+
+function recalcularInsumos() {
+  let subtotal = 0;
+  tbody.querySelectorAll("tr").forEach(tr => {
+    subtotal += parseFloat(tr.querySelector(".subtotal-input").value) || 0;
+  });
+  subtotalInsumosSpan.textContent = subtotal.toFixed(2);
+  recalcularPersonalizado();
+}
+
+function recalcularFila(tr) {
+  const sel = tr.querySelector(".insumo-select");
+  const cant = tr.querySelector(".cantidad");
+  const unit = tr.querySelector(".costo-unitario");
+  const subt = tr.querySelector(".subtotal-input");
+
+  const opt = sel.selectedOptions[0];
+  if (!opt.dataset.costo) return;
+
+  const costo = parseFloat(opt.dataset.costo);
+  const factor = parseFloat(opt.dataset.factor) || 1;
+  const real = costo / factor;
+
+  unit.value = real.toFixed(2);
+  subt.value = (real * (parseFloat(cant.value)||0)).toFixed(2);
+}
+
+function recalcularPersonalizado() {
+  if (tipoSelect.value.toLowerCase() !== "personalizado") return;
+
+  const costoDis = parseFloat(document.getElementById("costo_diseno").value) || 0;
+  const margen = parseFloat(document.getElementById("margen").value) || 0;
+  const insumos = parseFloat(subtotalInsumosSpan.textContent) || 0;
+
+  let precio = insumos + costoDis + (insumos * (margen/100));
+  precioPers.value = precio.toFixed(2);
+  precioHidden.value = precio.toFixed(2);
+}
+
+function recalcularTercerizado() {
+  if (tipoSelect.value.toLowerCase() !== "tercerizado") return;
+
+  const costoIni = parseFloat(document.getElementById("costo_inicial").value) || 0;
+  const margen = parseFloat(document.getElementById("margen_terc").value) || 0;
+
+  let precio = costoIni + (costoIni * (margen/100));
+  precioTerc.value = precio.toFixed(2);
+  precioHidden.value = precio.toFixed(2);
+}
+
+tbody.addEventListener("change", (e) => {
+  const tr = e.target.closest("tr");
+  if (!tr) return;
+  recalcularFila(tr);
+  recalcularInsumos();
+});
+
+tbody.addEventListener("click", (e) => {
+  if (e.target.classList.contains("borrar")) {
+    e.target.closest("tr").remove();
+    recalcularInsumos();
+  }
+});
+
+document.getElementById("costo_diseno").addEventListener("input", recalcularPersonalizado);
+document.getElementById("margen").addEventListener("input", recalcularPersonalizado);
+document.getElementById("costo_inicial").addEventListener("input", recalcularTercerizado);
+document.getElementById("margen_terc").addEventListener("input", recalcularTercerizado);
+
+document.addEventListener("DOMContentLoaded", () => {
+  actualizarVisibilidad();
+  tbody.querySelectorAll("tr").forEach(tr => recalcularFila(tr));
+  recalcularInsumos();
+  recalcularPersonalizado();
+  recalcularTercerizado();
+});
+
+</script>
+
 {% endblock %}

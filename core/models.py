@@ -172,7 +172,7 @@ class Insumos(models.Model):
     descripcion = models.TextField(blank=True, null=True)
     unidad_medida = models.CharField(max_length=40, null=True, blank=True, db_column="unidad_medida")
     factor_conversion = models.DecimalField(max_digits=10, decimal_places=2, default=1)
-    stock_actual = models.IntegerField(blank=True, null=True)
+    stock_actual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     stock_minimo = models.IntegerField(blank=True, null=True)
     precio_costo_unitario = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     proveedor = models.ForeignKey("Proveedores", on_delete=models.PROTECT, null=True, blank=False)
@@ -239,6 +239,7 @@ class Pedidos(models.Model):
     fecha_entrega_estimada = models.DateField(blank=True, null=True)
     fecha_entrega_real = models.DateField(blank=True, null=True)
     total_pedido = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    stock_descontado = models.BooleanField(default=False)
 
     class Meta:
         db_table = "pedidos"
@@ -246,8 +247,8 @@ class Pedidos(models.Model):
 
 
 class TiposProducto(models.Model):
-    id_tipo_producto = models.AutoField(primary_key=True)
-    nombre = models.CharField(max_length=100, unique=True)
+    id_tipo = models.AutoField(primary_key=True)
+    nombre_tipo = models.CharField(max_length=80)
 
     class Meta:
         db_table = "tipos_producto"
@@ -255,19 +256,36 @@ class TiposProducto(models.Model):
         verbose_name_plural = "Tipos de Productos"
 
     def __str__(self):
-        return self.nombre
+        return self.nombre_tipo
+
+
+
 
 
 class Productos(models.Model):
     id_producto = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=120)
     descripcion = models.TextField(blank=True, null=True)
-    precio = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
-    tipo = models.ForeignKey(TiposProducto, on_delete=models.PROTECT, db_column="id_tipo_producto")
+    precio = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    tipo = models.ForeignKey(
+        TiposProducto,
+        on_delete=models.PROTECT,
+        db_column="tipo_id",
+        related_name="productos",
+        null=True,
+        blank=True
+    )
+    costo_diseno = models.DecimalField(max_digits=10, decimal_places=2)
+    margen_ganancia = models.DecimalField(max_digits=5, decimal_places=2)
 
     class Meta:
         db_table = "productos"
-        verbose_name_plural = "Productos"
+
+    def __str__(self):
+        return self.nombre
+
+
+
 
 
 class PedidosProductos(models.Model):
@@ -283,22 +301,29 @@ class PedidosProductos(models.Model):
 
 class ProductosInsumos(models.Model):
     id = models.AutoField(primary_key=True)
-    producto = models.ForeignKey(Productos, on_delete=models.CASCADE, db_column="producto_id")
-    insumo = models.ForeignKey(Insumos, on_delete=models.PROTECT, db_column="insumo_id")
+    producto = models.ForeignKey(
+        Productos,
+        on_delete=models.CASCADE,
+        db_column="producto_id"
+    )
+    insumo = models.ForeignKey(
+        Insumos,
+        on_delete=models.PROTECT,
+        db_column="insumo_id"
+    )
     cantidad = models.DecimalField(max_digits=10, decimal_places=2)
-
     class Meta:
         db_table = "productos_insumos"
         verbose_name = "Producto-Insumo"
         verbose_name_plural = "Productos-Insumos"
-
     def __str__(self):
         return f"{self.producto} → {self.insumo} ({self.cantidad})"
 
 
+
 class Presupuestos(models.Model):
     id_presupuesto = models.AutoField(primary_key=True)
-    id_cliente = models.ForeignKey(Cliente, models.PROTECT, db_column="id_cliente")
+    id_cliente = models.ForeignKey(Cliente,models.PROTECT,db_column="id_cliente",null=True, blank=True)
     fecha_emision = models.DateField(blank=True, null=True)
     fecha_vencimiento = models.DateField(blank=True, null=True)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
@@ -422,22 +447,6 @@ class StockMovimientos(models.Model):
         return f"{self.fecha_hora} - {self.insumo.nombre} ({self.tipo})"
 
 
-class StockMovimientos(models.Model):
-    id = models.AutoField(primary_key=True)
-    insumo = models.ForeignKey(Insumos, on_delete=models.CASCADE)
-    tipo = models.CharField(max_length=20)  # "ALTA", "USO", "ELIMINACION"
-    cantidad = models.DecimalField(max_digits=10, decimal_places=2)
-    fecha = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "stock_movimientos"
-        verbose_name = "Movimiento de Stock"
-        verbose_name_plural = "Movimientos de Stock"
-
-    def __str__(self):
-        return f"{self.tipo} - {self.insumo.nombre} ({self.cantidad})"
-
-
 class ConfiguracionEmpresa(models.Model):
     nombre_empresa = models.CharField(max_length=255, blank=True, null=True)
     direccion = models.CharField(max_length=255, blank=True, null=True)
@@ -518,3 +527,5 @@ class TrabajoInsumo(models.Model):
     class Meta:
         db_table = "trabajos_insumos"
         verbose_name_plural = "Trabajo Insumos"
+
+

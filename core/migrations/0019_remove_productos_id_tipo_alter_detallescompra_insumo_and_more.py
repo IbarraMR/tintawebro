@@ -11,10 +11,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='productos',
-            name='id_tipo',
-        ),
+
         migrations.AlterField(
             model_name='detallescompra',
             name='insumo',

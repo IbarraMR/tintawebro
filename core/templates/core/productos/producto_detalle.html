@@ -1,0 +1,108 @@
+{% extends 'core/base.html' %}
+{% load static %}
+{% load custom_filters %}
+{% block title %}Detalle del Producto{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="text-white mb-0">Producto: {{ producto.nombre }}</h2>
+    <div class="d-flex gap-2">
+      <a href="{% url 'producto_edit' producto.id_producto %}" class="btn btn-info">
+        <i class="fas fa-edit me-2"></i> Editar Producto
+      </a>
+      <a href="{% url 'productos_list' %}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-2"></i> Volver al Listado
+      </a>
+    </div>
+  </div>
+
+  <!-- Información principal -->
+  <div class="card p-4 mb-4" style="background-color: #1f1f1f; border: 1px solid #333333;">
+    <div class="row text-white">
+
+      <div class="col-md-6 mb-3">
+        <strong>Descripción:</strong><br>
+        {{ producto.descripcion|default:"(Sin descripción)" }}
+      </div>
+
+      <div class="col-md-3 mb-3">
+        <strong>Tipo:</strong><br>
+        {% if producto.tipo %}
+          {{ producto.tipo.nombre_tipo }}
+        {% else %}
+          -
+        {% endif %}
+      </div>
+
+      <div class="col-md-3 mb-3">
+        <strong>Precio Final:</strong><br>
+        ${{ producto.precio|floatformat:2 }}
+      </div>
+
+      <div class="col-md-3 mb-3">
+        <strong>Costo Diseño:</strong><br>
+        ${{ producto.costo_diseno|default:"0"|floatformat:2 }}
+      </div>
+
+      <div class="col-md-3 mb-3">
+        <strong>Margen de Ganancia:</strong><br>
+        {{ producto.margen_ganancia|default:"0" }}%
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabla de insumos -->
+  {% if insumos %}
+  <div class="card p-4" style="background-color: #1f1f1f; border: 1px solid #333333;">
+    <h4 class="text-white mb-3">Insumos utilizados</h4>
+
+    <div class="table-responsive">
+      <table class="table table-dark table-hover mb-0">
+        <thead>
+          <tr class="text-center">
+            <th>#</th>
+            <th>Nombre</th>
+            <th>Unidad</th>
+            <th>Cantidad</th>
+            <th>Costo Unitario</th>
+            <th>Subtotal</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for item in insumos %}
+          <tr>
+            <td class="text-center">{{ forloop.counter }}</td>
+
+            <td>{{ item.insumo.nombre }}</td>
+
+            <td class="text-center">
+              {{ item.insumo.unidad_medida|default:"-" }}
+            </td>
+
+            <td class="text-center">{{ item.cantidad }}</td>
+
+            <td class="text-end">
+              ${{ item.insumo.precio_costo_unitario|floatformat:2 }}
+            </td>
+
+            <td class="text-end">
+              ${{ item.insumo.precio_costo_unitario|mul:item.cantidad|floatformat:2 }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+
+      </table>
+    </div>
+  </div>
+
+  {% else %}
+  <div class="alert alert-info text-center">
+    Este producto no tiene insumos cargados.
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

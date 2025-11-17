@@ -6,6 +6,7 @@
 <meta charset="UTF-8">
 
 <style>
+    
 body {
     font-family: Arial, sans-serif;
     padding: 25px;
@@ -92,8 +93,6 @@ body {
 </head>
 
 <body>
-
-
 <div class="encabezado">
 
     <div class="logo-wrapper">
@@ -149,8 +148,18 @@ body {
 
 
 <p class="condiciones">
-    {{ config.condiciones_pago|default:""|linebreaksbr }}
+    {{ condiciones_pago|default:""|linebreaksbr }}
 </p>
+
+{% if otros_detalles %}
+    <hr>
+    <p class="condiciones">
+        <strong>Otros detalles:</strong><br>
+        {{ otros_detalles|linebreaksbr }}
+    </p>
+{% endif %}
+
+
 
 </body>
 </html>

@@ -29,17 +29,18 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from xhtml2pdf import pisa
+from datetime import date, timedelta
 from core.forms import (
     ClienteForm, ComprasForm, DetallesCompraFormSet, EmpleadoForm, 
     FormaPagoForm, InsumoForm, MovimientoCajaForm, ProveedorForm, 
-    PresupuestoForm, ProductoInsumoForm, ConfiguracionEmpresaForm, ConfiguracionEmailForm,
+    PresupuestoForm, ProductoInsumoForm, ConfiguracionEmpresaForm, ConfiguracionEmailForm, ProductoForm,
 )
 from core.models import (
     AuditoriaCaja, Cajas, Cliente, Compras, DetallesCompra, Empleados, 
     EstadosPedidos, FormaPago, Insumos, MovimientosCaja, Pedidos, 
     PedidosInsumos, Presupuestos, PresupuestosInsumos,UnidadMedida, Proveedores,
     StockMovimientos, Productos, ProductosInsumos,ConfiguracionEmpresa, ConfiguracionEmail,
-    PresupuestosProductos, Trabajo, TrabajoInsumo,
+    PresupuestosProductos, Trabajo, TrabajoInsumo, TiposProducto, 
     Proveedores as Proveedor
 ) 
 from core.utils_caja import registrar_movimiento
@@ -1016,35 +1017,63 @@ def presupuestos_list(request):
 
 @login_required
 def presupuesto_create(request):
-    from core.models import Productos
-    from core.models import Insumos
-
-
-    presupuesto = None
-    trabajos = None
-    productos = Productos.objects.all()
+    from datetime import date, timedelta
 
     if request.method == "POST":
         form = PresupuestoForm(request.POST)
+
         if form.is_valid():
-            presupuesto = form.save(commit=False)
-            presupuesto.costo_diseno = form.cleaned_data.get("costo_diseno") or 0
-            presupuesto.margen_ganancia = form.cleaned_data.get("margen_ganancia") or 0
-            presupuesto.id_usuario = request.user
-            presupuesto.save()
-            return redirect("presupuesto_edit", presupuesto_id=presupuesto.id_presupuesto)
+            presupuesto = form.save()
+            return redirect("presupuesto_edit", presupuesto.id_presupuesto)
+
     else:
-        form = PresupuestoForm()
+
+        presupuesto = Presupuestos.objects.create(
+            id_cliente=None,
+            fecha_emision=date.today(),
+            fecha_vencimiento=date.today() + timedelta(days=7),
+            subtotal=0,
+            costo_diseno=0,
+            margen_ganancia=0,
+            total_presupuesto=0,
+            estado_presupuesto="EN ESPERA",
+        )
+
+        form = PresupuestoForm(instance=presupuesto)
+
+    insumos = Insumos.objects.all().order_by("nombre")
+    productos = Productos.objects.select_related("tipo").all().order_by("nombre")
 
     return render(request, "core/presupuestos/presupuesto_form.html", {
+        "title": "Nuevo presupuesto",
         "form": form,
         "presupuesto": presupuesto,
-        "trabajos": trabajos,
-        "productos": productos, 
-        "title": "Nuevo presupuesto",
-        "insumos": Insumos.objects.all()
+        "insumos": insumos,
+        "productos": productos,
     })
 
+
+@require_POST
+@login_required
+def presupuesto_set_cliente(request, presupuesto_id):
+    try:
+        presupuesto = Presupuestos.objects.get(id_presupuesto=presupuesto_id)
+    except Presupuestos.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "Presupuesto no encontrado."})
+
+    id_cliente = request.POST.get("id_cliente")
+
+    if not id_cliente:
+        return JsonResponse({"ok": False, "error": "Cliente inválido."})
+
+    try:
+        cliente = Cliente.objects.get(id_cliente=id_cliente)  
+        presupuesto.id_cliente = cliente
+        presupuesto.save()
+    except Cliente.DoesNotExist:  
+        return JsonResponse({"ok": False, "error": "Cliente no existe."})
+
+    return JsonResponse({"ok": True})
 
 
 
@@ -1059,32 +1088,81 @@ def configuracion(request):
 @transaction.atomic
 def convertir_presupuesto_a_pedido(request, pk):
     presupuesto = get_object_or_404(Presupuestos, id_presupuesto=pk)
+
+    # 🔥 VALIDAR CLIENTE
+    if not presupuesto.id_cliente:
+        messages.error(request, "❌ No podés generar un pedido sin seleccionar un cliente.")
+        return redirect("presupuesto_detalle", pk)
+
+    # 🔥 CREAR EL PEDIDO
     pedido = Pedidos.objects.create(
         id_cliente=presupuesto.id_cliente,
         total_pedido=presupuesto.total_presupuesto,
     )
-    from core.models import EstadosPedidos
+
+    # Estado inicial: EN PRODUCCIÓN
     estado_produccion = EstadosPedidos.objects.get(nombre_estado="EN PRODUCCIÓN")
     pedido.id_estado = estado_produccion
+    pedido.stock_descontado = False
     pedido.save()
-    detalles_presupuesto = PresupuestosInsumos.objects.filter(presupuesto=presupuesto)
 
-    for det in detalles_presupuesto:
-        PedidosInsumos.objects.create(
-            pedido=pedido,
-            insumo=det.insumo,
-            cantidad=det.cantidad,
-            precio_unitario=det.precio_unitario,
-        )
+    # IMPORTS NECESARIOS
+    from core.models import StockMovimientos, TrabajoInsumo, Trabajo
+
+    # 🔥 --- DESCONTAR STOCK (USANDO TRABAJOS E INSUMOS REALES) ---
+    trabajos = Trabajo.objects.filter(presupuesto=presupuesto)
+
+    for trabajo in trabajos:
+
+        insumos_trabajo = TrabajoInsumo.objects.filter(trabajo=trabajo)
+
+        for det in insumos_trabajo:
+
+            # Crear detalle del pedido (esto es lo que ve el usuario)
+            PedidosInsumos.objects.create(
+                pedido=pedido,
+                insumo=det.insumo,
+                cantidad=det.cantidad,
+                precio_unitario=det.precio_unitario,
+            )
+
+            insumo = det.insumo
+
+            # FACTOR DE CONVERSIÓN (resmas, metros, etc.)
+            factor = float(insumo.factor_conversion or 1)
+
+            # 🔥 Cálculo real → dividir cantidad / factor
+            cantidad_real = float(det.cantidad) / factor
+
+            # 🔥 Descontar stock
+            stock_antes = float(insumo.stock_actual or 0)
+            insumo.stock_actual = stock_antes - cantidad_real
+            insumo.save()
+
+            # Registrar movimiento de salida
+            StockMovimientos.objects.create(
+                insumo=insumo,
+                tipo="salida",
+                cantidad=cantidad_real,
+                detalle=f"Uso de insumo por Pedido #{pedido.id_pedido}"
+            )
+
+    # Marcamos que ya se descontó stock
+    pedido.stock_descontado = True
+    pedido.save()
+
+    # Cambiar estado del presupuesto
     presupuesto.estado_presupuesto = "CONFIRMADO"
     presupuesto.save()
+
     messages.success(
         request,
-        f"✅ Pedido #{pedido.id_pedido} generado y puesto en producción.",
+        f"✅ Pedido #{pedido.id_pedido} generado y puesto en producción. Se descontó stock.",
         extra_tags="success"
     )
 
-    return redirect("pedidos_list")  
+    return redirect("pedidos_list")
+
 
 
 
@@ -1304,36 +1382,52 @@ def cliente_create_ajax(request):
 
 
 from core.models import Insumos
-@login_required
+@csrf_exempt
 def generar_pdf_presupuesto(request, pk):
-    from django.conf import settings
-    import os
+    from django.template.loader import render_to_string
+    from django.http import HttpResponse
+    from xhtml2pdf import pisa
 
-    presupuesto = get_object_or_404(Presupuestos, pk=pk)
+    presupuesto = Presupuestos.objects.get(id_presupuesto=pk)
     trabajos = presupuesto.trabajos.all()
-    total_general = trabajos.aggregate(total=Sum("total_trabajo"))["total"] or 0
+
+    # Configuración de la empresa
     config = ConfiguracionEmpresa.objects.first()
 
-    logo_path = None
-    if config and config.logo:
-        logo_path = os.path.join(settings.MEDIA_ROOT, config.logo.name).replace("\\", "/")
+    # Datos del formulario (si el usuario no cambia, usa valores de config)
+    nombre_empresa = request.POST.get("nombre_empresa", config.nombre_empresa)
+    direccion = request.POST.get("direccion", config.direccion)
+    email = request.POST.get("email", config.email)
+    telefono = request.POST.get("telefono", config.telefono)
+    condiciones_pago = request.POST.get("condiciones_pago", config.condiciones_pago)
+    otros_detalles = request.POST.get("otros_detalles", "")
 
-    template_path = "core/presupuestos/presupuesto_pdf_template.html"
-    context = {
+    total_general = sum([t.total_trabajo for t in trabajos])
+
+    # Logo
+    logo_path = ""
+    if config.logo:
+        logo_path = config.logo.path
+
+    # Render HTML → PDF
+    html = render_to_string("core/presupuestos/presupuesto_pdf_template.html", {
         "presupuesto": presupuesto,
         "trabajos": trabajos,
         "total_general": total_general,
         "config": config,
-        "logo_path": logo_path
-    }
-
-    template = get_template(template_path)
-    html = template.render(context)
+        "nombre_empresa": nombre_empresa,
+        "direccion": direccion,
+        "email": email,
+        "telefono": telefono,
+        "condiciones_pago": condiciones_pago,
+        "otros_detalles": otros_detalles,
+        "logo_path": logo_path,
+    })
 
     response = HttpResponse(content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename=\"Presupuesto_{pk}.pdf\"'
-
+    response["Content-Disposition"] = f'attachment; filename="presupuesto_{pk}.pdf"'
     pisa.CreatePDF(html, dest=response)
+
     return response
 
 
@@ -1351,6 +1445,8 @@ def presupuesto_confirmar(request, pk):
 def presupuesto_edit(request, presupuesto_id):
     presupuesto = get_object_or_404(Presupuestos, id_presupuesto=presupuesto_id)
     trabajos = presupuesto.trabajos.all() 
+    insumos = Insumos.objects.all().order_by("nombre")
+    productos = Productos.objects.select_related("tipo").all().order_by("nombre")
 
     if request.method == "POST":
         form = PresupuestoForm(request.POST, instance=presupuesto)
@@ -1359,7 +1455,6 @@ def presupuesto_edit(request, presupuesto_id):
             presupuesto = form.save(commit=False)
             subtotal = trabajos.aggregate(total=Sum("total_trabajo"))["total"] or 0
             presupuesto.subtotal = subtotal
-
             total = subtotal
 
             if presupuesto.costo_diseno:
@@ -1367,7 +1462,6 @@ def presupuesto_edit(request, presupuesto_id):
 
             if presupuesto.margen_ganancia:
                 total = total * (1 + (presupuesto.margen_ganancia / 100))
-
             presupuesto.total_presupuesto = total
             presupuesto.save()
 
@@ -1386,8 +1480,11 @@ def presupuesto_edit(request, presupuesto_id):
         "form": form,
         "presupuesto": presupuesto,
         "trabajos": trabajos,
+        "insumos": insumos,
+        "productos": productos,
         "title": "Editar presupuesto",
     })
+
 
 
 
@@ -1424,7 +1521,7 @@ def presupuesto_previa_pdf(request, pk):
         config.otros_detalles = request.POST.get("otros_detalles")
         config.save()
 
-        return redirect("presupuesto_pdf", pk=pk)
+        return redirect("generar_pdf_presupuesto", pk=pk)
 
     return render(request, "core/presupuestos/previa_pdf.html", {
         "presupuesto": presupuesto,
@@ -1598,87 +1695,135 @@ def crear_presupuesto_borrador(request):
 @login_required
 @require_POST
 @transaction.atomic
-def agregar_trabajo(request, presupuesto_id):
-    presupuesto = get_object_or_404(Presupuestos, pk=presupuesto_id)
-    from core.models import Insumos
+def agregar_trabajo(request, id_presupuesto):
+    try:
+        presupuesto = Presupuestos.objects.get(id_presupuesto=id_presupuesto)
+    except Presupuestos.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "Presupuesto no encontrado."}, status=404)
+
+    # 🔴 VALIDACIÓN NUEVA: cliente obligatorio
+    if not presupuesto.id_cliente:
+        return JsonResponse({
+            "ok": False,
+            "error": "Debe seleccionar un cliente antes de agregar trabajos."
+        })
 
     nombre = (request.POST.get("nombre_trabajo") or "").strip()
+    descripcion = request.POST.get("descripcion_trabajo") or ""
+    try:
+        cantidad = int(request.POST.get("cantidad_trabajo") or 1)
+    except ValueError:
+        cantidad = 1
+
+    from decimal import Decimal
+    try:
+        costo_diseno = Decimal(request.POST.get("costo_diseno_trabajo") or "0")
+    except Exception:
+        costo_diseno = Decimal("0")
+
+    try:
+        margen = Decimal(request.POST.get("margen_trabajo") or "0")
+    except Exception:
+        margen = Decimal("0")
+
     if not nombre:
-        return HttpResponseBadRequest("Falta nombre_trabajo")
+        return JsonResponse({"ok": False, "error": "Debe ingresar un nombre para el trabajo."})
 
-    descripcion = (request.POST.get("descripcion_trabajo") or "").strip()
-
+    insumos_json = request.POST.get("insumos_json", "[]")
     try:
-        cantidad_trabajo = int(request.POST.get("cantidad_trabajo") or "1")
-        cantidad_trabajo = max(1, cantidad_trabajo)
-    except ValueError:
-        cantidad_trabajo = 1
+        lista_insumos = json.loads(insumos_json)
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "Error al leer los insumos enviados."})
 
-    try:
-        costo_diseno = float(request.POST.get("costo_diseno_trabajo") or 0)
-        margen = float(request.POST.get("margen_trabajo") or 0)
-        margen = max(0.0, min(margen, 100.0))
-    except ValueError:
-        costo_diseno, margen = 0.0, 0.0
+    if not lista_insumos:
+        return JsonResponse({"ok": False, "error": "Debe agregar al menos un insumo."})
 
-    insumo_ids = request.POST.getlist("insumo[]")
-    cantidades = request.POST.getlist("cantidad[]")
-
-    if not insumo_ids:
-        return HttpResponseBadRequest("Debe agregar al menos un insumo")
+    editar_id = request.POST.get("editar_id")
+    if editar_id:
+        try:
+            trabajo_viejo = Trabajo.objects.get(pk=editar_id, presupuesto=presupuesto)
+            trabajo_viejo.delete()
+        except Trabajo.DoesNotExist:
+            pass
 
     trabajo = Trabajo.objects.create(
         presupuesto=presupuesto,
         nombre_trabajo=nombre,
         descripcion=descripcion,
-        cantidad=cantidad_trabajo,
+        cantidad=cantidad,
         costo_diseno=costo_diseno,
         margen_ganancia=margen,
+        subtotal_insumos=Decimal("0.00"),
+        precio_unitario=Decimal("0.00"),
+        total_trabajo=Decimal("0.00"),
     )
 
-    subtotal_insumos = 0.0
+    subtotal_insumos = Decimal("0.00")
 
-    for insumo_id, cant_str in zip(insumo_ids, cantidades):
-        if not insumo_id:
+    for item in lista_insumos:
+        id_insumo = item.get("id_insumo")
+        if not id_insumo:
             continue
 
         try:
-            cant = float(cant_str or 0)
-        except ValueError:
-            cant = 0.0
-
-        if cant <= 0:
+            insumo = Insumos.objects.get(id_insumo=id_insumo)
+        except Insumos.DoesNotExist:
             continue
 
-        insumo = Insumos.objects.get(pk=insumo_id)
-        costo_unitario_real = float(insumo.precio_costo_unitario) / float(insumo.factor_conversion or 1)
+        try:
+            cant = Decimal(str(item.get("cantidad") or "1"))
+        except Exception:
+            cant = Decimal("1")
 
-        item_subtotal = costo_unitario_real * cant
-        subtotal_insumos += item_subtotal
+        try:
+            precio_unit = Decimal(str(item.get("costo_unitario") or "0"))
+        except Exception:
+            precio_unit = Decimal("0")
+
+        try:
+            sub = Decimal(str(item.get("subtotal") or "0"))
+        except Exception:
+            sub = precio_unit * cant
 
         TrabajoInsumo.objects.create(
             trabajo=trabajo,
             insumo=insumo,
             cantidad=cant,
-            precio_unitario=costo_unitario_real,
-            subtotal=item_subtotal,
+            precio_unitario=precio_unit,
+            subtotal=sub,
         )
 
-    precio_unitario = subtotal_insumos + costo_diseno + (subtotal_insumos * (margen / 100.0))
-    total_trabajo = precio_unitario * cantidad_trabajo
+        subtotal_insumos += sub
 
-    trabajo.subtotal_insumos = round(subtotal_insumos, 2)
-    trabajo.precio_unitario = round(precio_unitario, 2)
-    trabajo.total_trabajo = round(total_trabajo, 2)
+    costo_bruto = subtotal_insumos + costo_diseno
+    precio_unitario = costo_bruto * (Decimal("1.00") + (margen / Decimal("100")))
+    total_trabajo = precio_unitario * cantidad
+
+    trabajo.subtotal_insumos = subtotal_insumos
+    trabajo.precio_unitario = precio_unitario
+    trabajo.total_trabajo = total_trabajo
     trabajo.save()
 
-    tot = presupuesto.trabajos.aggregate(s=Sum("total_trabajo"))["s"] or 0
-    presupuesto.subtotal = tot
-    presupuesto.total_presupuesto = tot
+    total_presupuesto = (
+        presupuesto.trabajos.aggregate(s=Sum("total_trabajo"))["s"] or Decimal("0.00")
+    )
+    presupuesto.total_presupuesto = total_presupuesto
     presupuesto.save()
 
-    html = render_to_string("core/presupuestos/_tabla_trabajos.html", {"presupuesto": presupuesto})
-    return JsonResponse({"ok": True, "tabla": html})
+    tabla_html = render_to_string(
+        "core/presupuestos/_tabla_trabajos.html",
+        {"presupuesto": presupuesto},
+        request=request,
+    )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "tabla": tabla_html,
+            "total": f"{total_presupuesto:.2f}",
+        }
+    )
+
 
 
 @login_required
@@ -1688,17 +1833,37 @@ def listar_trabajos(request, presupuesto_id):
     return JsonResponse({"ok": True, "tabla": html})
 
 
-@login_required
 @require_POST
 def eliminar_trabajo(request, trabajo_id):
-    trabajo = get_object_or_404(Trabajo, pk=trabajo_id)
+    try:
+        trabajo = Trabajo.objects.select_related("presupuesto").get(id=trabajo_id)
+    except Trabajo.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "Trabajo no encontrado."}, status=404)
+
     presupuesto = trabajo.presupuesto
     trabajo.delete()
-    tot = presupuesto.trabajos.aggregate(s=Sum("total_trabajo"))["s"] or 0
-    presupuesto.subtotal = tot
-    presupuesto.total_presupuesto = tot
+
+    from decimal import Decimal
+    total_presupuesto = (
+        presupuesto.trabajos.aggregate(s=Sum("total_trabajo"))["s"] or Decimal("0.00")
+    )
+    presupuesto.total_presupuesto = total_presupuesto
     presupuesto.save()
-    return JsonResponse({"ok": True})
+
+    tabla_html = render_to_string(
+        "core/presupuestos/_tabla_trabajos.html",
+        {"presupuesto": presupuesto},
+        request=request,
+    )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "tabla": tabla_html,
+            "total": f"{total_presupuesto:.2f}",
+        }
+    )
+
 
 
 @login_required
@@ -1715,6 +1880,62 @@ def obtener_trabajo(request, trabajo_id):
         "margen": float(trabajo.margen_ganancia),
         "insumos": list(insumos),
     })
+
+
+@require_POST
+def duplicar_trabajo(request, trabajo_id):
+    try:
+        trabajo = Trabajo.objects.select_related("presupuesto").get(id=trabajo_id)
+    except Trabajo.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "Trabajo no encontrado."}, status=404)
+
+    presupuesto = trabajo.presupuesto
+
+    # 1) Crear copia del trabajo
+    nuevo_trabajo = Trabajo.objects.create(
+        presupuesto=presupuesto,
+        nombre_trabajo=f"{trabajo.nombre_trabajo} (copia)",
+        descripcion=trabajo.descripcion,
+        cantidad=trabajo.cantidad,
+        costo_diseno=trabajo.costo_diseno,
+        margen_ganancia=trabajo.margen_ganancia,
+        subtotal_insumos=trabajo.subtotal_insumos,
+        precio_unitario=trabajo.precio_unitario,
+        total_trabajo=trabajo.total_trabajo,
+    )
+
+    # 2) Copiar insumos
+    for ti in trabajo.insumos.all():
+        TrabajoInsumo.objects.create(
+            trabajo=nuevo_trabajo,
+            insumo=ti.insumo,
+            cantidad=ti.cantidad,
+            precio_unitario=ti.precio_unitario,
+            subtotal=ti.subtotal,
+        )
+
+    # 3) Recalcular total presupuesto
+    from decimal import Decimal
+    total_presupuesto = (
+        presupuesto.trabajos.aggregate(s=Sum("total_trabajo"))["s"] or Decimal("0.00")
+    )
+    presupuesto.total_presupuesto = total_presupuesto
+    presupuesto.save()
+
+    # 4) Devolver tabla actualizada
+    tabla_html = render_to_string(
+        "core/presupuestos/_tabla_trabajos.html",
+        {"presupuesto": presupuesto},
+        request=request,
+    )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "tabla": tabla_html,
+            "total": f"{total_presupuesto:.2f}",
+        }
+    )
 
 
 @login_required
@@ -1752,7 +1973,95 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
 
     pedido = get_object_or_404(Pedidos, id_pedido=id_pedido)
 
-    estado = EstadosPedidos.objects.get(nombre_estado=nuevo_estado)
+    try:
+        estado = EstadosPedidos.objects.get(nombre_estado=nuevo_estado)
+    except EstadosPedidos.DoesNotExist:
+        return JsonResponse({"error": "Estado inválido"}, status=400)
+
+    # Guardamos el estado anterior
+    estado_anterior = pedido.id_estado.nombre_estado if pedido.id_estado else None
+
+    from core.models import TrabajoInsumo, StockMovimientos, Trabajo
+
+    # ----------------------------------------------------------------------
+    # 🔥 SI PASA A "ENTREGADO": no tocar stock, solo actualizar estado
+    # ----------------------------------------------------------------------
+    if nuevo_estado == "ENTREGADO":
+        pedido.id_estado = estado
+        pedido.save()
+
+        return JsonResponse({
+            "success": True,
+            "nuevo_estado": estado.nombre_estado
+        })
+
+    # ----------------------------------------------------------------------
+    # 🔥 SI PASA A "EN PRODUCCIÓN": descuento YA se hizo al crear el pedido.
+    # Solo marcamos el estado (NO tocamos stock)
+    # ----------------------------------------------------------------------
+    if nuevo_estado == "EN PRODUCCIÓN":
+        pedido.id_estado = estado
+        pedido.save()
+
+        return JsonResponse({
+            "success": True,
+            "nuevo_estado": estado.nombre_estado,
+            "nota": "Stock ya estaba descontado al confirmar presupuesto."
+        })
+
+    # ----------------------------------------------------------------------
+    # 🔥 SI PASA A "CANCELADO": DEVOLVER STOCK (pero solo si antes se descontó)
+    # ----------------------------------------------------------------------
+    if nuevo_estado == "CANCELADO":
+
+        if not pedido.stock_descontado:
+            return JsonResponse({
+                "success": True,
+                "nuevo_estado": estado.nombre_estado,
+                "nota": "No se devolvió stock porque nunca fue descontado."
+            })
+
+        # Recuperamos los trabajos originales del presupuesto
+        trabajos = Trabajo.objects.filter(presupuesto=pedido.id_cliente.presupuestos_set.first())
+
+        # 🛠 PERO: como es complejo ir por el presupuesto original,
+        # mejor recuperamos los insumos del pedido directamente (más seguro)
+        detalles = pedido.detalles.all()
+
+        for det in detalles:
+
+            insumo = det.insumo
+            factor = float(insumo.factor_conversion or 1)
+
+            # Cantidad REAL devuelta → lo mismo que se descontó
+            cantidad_real = float(det.cantidad) / factor
+
+            # Devolver stock
+            stock_antes = float(insumo.stock_actual or 0)
+            insumo.stock_actual = stock_antes + cantidad_real
+            insumo.save()
+
+            # Registrar movimiento
+            StockMovimientos.objects.create(
+                insumo=insumo,
+                tipo="entrada",
+                cantidad=cantidad_real,
+                detalle=f"Devolución por cancelación del Pedido #{pedido.id_pedido}"
+            )
+
+        pedido.stock_descontado = False
+        pedido.id_estado = estado
+        pedido.save()
+
+        return JsonResponse({
+            "success": True,
+            "nuevo_estado": estado.nombre_estado,
+            "stock_devuelto": True
+        })
+
+    # ----------------------------------------------------------------------
+    # 🔥 default (no debería llegar)
+    # ----------------------------------------------------------------------
     pedido.id_estado = estado
     pedido.save()
 
@@ -1761,37 +2070,232 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
         "nuevo_estado": estado.nombre_estado
     })
 
+
+
+
+
+
 @never_cache
 @login_required
-@permission_required('core.view_movimientoscaja', raise_exception=True)
-def movimientos_list(request):
-    q = request.GET.get("q", "")
-    desde = request.GET.get("desde")
-    hasta = request.GET.get("hasta")
-    forma_pago = request.GET.get("forma_pago")
+@permission_required('core.view_productos', raise_exception=True)
+def productos_list(request):
+    query = request.GET.get("q", "")
+    productos = Productos.objects.select_related("tipo").all().order_by("nombre")
 
-    movs = MovimientosCaja.objects.all().order_by("-fecha_hora")
-    if q:
-        movs = movs.filter(Q(descripcion__icontains=q))
+    if query:
+        productos = productos.filter(
+            Q(nombre__icontains=query) |
+            Q(descripcion__icontains=query)
+        )
 
-    if desde:
-        movs = movs.filter(fecha_hora__date__gte=desde)
-
-    if hasta:
-        movs = movs.filter(fecha_hora__date__lte=hasta)
-
-    if forma_pago:
-        movs = movs.filter(forma_pago__id_forma=forma_pago)
-    paginator = Paginator(movs, 15)
-    page_number = request.GET.get("page")
-    movs = paginator.get_page(page_number)
-
-    form = MovimientoCajaForm()
-    formas_pago = FormaPago.objects.all()
-
-    return render(request, "core/caja/movimientos_list.html", {
-        "movs": movs,        
-        "form": form,
-        "formas_pago": formas_pago,
-        "page_obj": movs,    
+    return render(request, "core/productos/productos_list.html", {
+        "productos": productos,
+        "query": query,
     })
+
+
+@never_cache
+@login_required
+@permission_required('core.add_productos', raise_exception=True)
+def producto_create(request):
+    insumos = Insumos.objects.all()
+
+    if request.method == "POST":
+        nombre = request.POST.get("nombre")
+        descripcion = request.POST.get("descripcion")
+        tipo_str = request.POST.get("tipo")
+        precio = Decimal(request.POST.get("precio", "0"))
+        costo_diseno = Decimal(request.POST.get("costo_diseno", "0"))
+        margen_ganancia = Decimal(request.POST.get("margen_ganancia", "0"))
+
+        tipo_obj = TiposProducto.objects.filter(nombre_tipo__iexact=tipo_str).first()
+        if not tipo_obj:
+            messages.error(request, "Tipo de producto no válido.")
+            return redirect("producto_create")
+
+        producto = Productos.objects.create(
+            nombre=nombre,
+            descripcion=descripcion,
+            precio=precio,
+            tipo=tipo_obj,
+            costo_diseno=costo_diseno,
+            margen_ganancia=margen_ganancia
+        )
+
+        if tipo_str.lower() == "personalizado":
+            insumos_ids = request.POST.getlist("insumo[]")
+            cantidades = request.POST.getlist("cantidad[]")
+
+            for insumo_id, cant in zip(insumos_ids, cantidades):
+                if insumo_id:
+                    ProductosInsumos.objects.create(
+                        producto=producto,
+                        insumo=Insumos.objects.get(id_insumo=insumo_id),
+                        cantidad=cant
+                    )
+
+        messages.success(request, "Producto creado correctamente")
+        return redirect("productos_list")
+
+    return render(request, "core/productos/producto_form.html", {
+        "title": "Nuevo Producto",
+        "insumos": insumos,
+        "producto": None,
+        "producto_insumos": None,
+        "tipo_actual": None,
+    })
+
+
+
+
+
+@never_cache
+@login_required
+@permission_required('core.change_productos', raise_exception=True)
+def producto_edit(request, pk):
+    producto = Productos.objects.get(pk=pk)
+    insumos = Insumos.objects.all().order_by('nombre')
+    tipo_valor = producto.tipo.nombre_tipo.lower() if producto.tipo else "personalizado"
+
+    if request.method == "POST":
+        producto.nombre = request.POST.get("nombre")
+        producto.descripcion = request.POST.get("descripcion")
+
+        costo_diseno = Decimal(request.POST.get("costo_diseno", "0"))
+        margen_ganancia = Decimal(request.POST.get("margen_ganancia", "0"))
+        precio_final = Decimal(request.POST.get("precio", "0"))
+
+        tipo_valor = request.POST.get("tipo")
+        tipo = TiposProducto.objects.filter(nombre_tipo__iexact=tipo_valor).first()
+
+        if not tipo:
+            messages.error(request, "Debe seleccionar un tipo de producto válido.")
+            return redirect("producto_edit", pk=pk)
+
+        producto.tipo = tipo
+        producto.precio = precio_final
+        producto.costo_diseno = costo_diseno
+        producto.margen_ganancia = margen_ganancia
+        producto.save()
+
+        if tipo_valor == "personalizado":
+            insumo_ids = request.POST.getlist("insumo[]")
+            cantidades = request.POST.getlist("cantidad[]")
+
+            ProductosInsumos.objects.filter(producto=producto).delete()
+
+            for insumo_id, cant in zip(insumo_ids, cantidades):
+                if insumo_id:
+                    ProductosInsumos.objects.create(
+                        producto=producto,
+                        insumo=Insumos.objects.get(id_insumo=insumo_id),
+                        cantidad=cant
+                    )
+        else:
+            ProductosInsumos.objects.filter(producto=producto).delete()
+
+        messages.success(request, f"Producto '{producto.nombre}' actualizado correctamente.")
+        return redirect("productos_list")
+
+    producto_insumos = ProductosInsumos.objects.filter(producto=producto)
+
+    return render(request, "core/productos/producto_form.html", {
+        "title": f"Editar Producto: {producto.nombre}",
+        "producto": producto,
+        "insumos": insumos,
+        "producto_insumos": producto_insumos,
+        "tipo_actual": tipo_valor,
+    })
+
+
+
+@never_cache
+@login_required
+@permission_required('core.view_productos', raise_exception=True)
+def producto_detalle(request, pk):
+    producto = get_object_or_404(Productos, pk=pk)
+    insumos = ProductosInsumos.objects.filter(producto=producto).select_related("insumo")
+
+    return render(request, "core/productos/producto_detalle.html", {
+        "producto": producto,
+        "insumos": insumos,
+    })
+
+
+def producto_delete(request, id_producto):
+    producto = get_object_or_404(Productos, id_producto=id_producto)
+
+    if request.method == "POST":
+        try:
+            ProductosInsumos.objects.filter(producto=producto).delete()
+
+            producto.delete()
+            messages.success(request, "Producto eliminado correctamente.")
+        except Exception as e:
+            messages.error(request, f"No se pudo eliminar el producto: {e}")
+
+        return redirect("productos_list")
+
+    messages.error(request, "Acción no permitida.")
+    return redirect("productos_list")
+
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def agregar_producto_presupuesto(request, presupuesto_id):
+    presupuesto = get_object_or_404(Presupuestos, pk=presupuesto_id)
+
+    producto_id = request.POST.get("id_producto")
+    cantidad = int(request.POST.get("cantidad", 1))
+
+    from core.models import Productos, ProductosInsumos, Trabajo, TrabajoInsumo
+
+    producto = get_object_or_404(Productos, pk=producto_id)
+
+    trabajo = Trabajo.objects.create(
+        presupuesto=presupuesto,
+        nombre_trabajo=producto.nombre,
+        descripcion=producto.descripcion or "",
+        cantidad=cantidad,
+        costo_diseno=0,
+        margen_ganancia=0,
+    )
+
+    insumos_producto = ProductosInsumos.objects.filter(producto=producto)
+    subtotal_insumos = 0
+
+    for pi in insumos_producto:
+        cant = float(pi.cantidad)
+        precio_unit_insumo = float(pi.insumo.precio_costo_unitario) / float(pi.insumo.factor_conversion or 1)
+        subtotal = precio_unit_insumo * cant
+        subtotal_insumos += subtotal
+
+        TrabajoInsumo.objects.create(
+            trabajo=trabajo,
+            insumo=pi.insumo,
+            cantidad=cant,
+            precio_unitario=precio_unit_insumo,
+            subtotal=subtotal,
+        )
+
+    precio_unitario_real = float(producto.precio)
+    total_trabajo = precio_unitario_real * cantidad
+
+    trabajo.subtotal_insumos = round(subtotal_insumos, 2)
+    trabajo.precio_unitario = round(precio_unitario_real, 2)
+    trabajo.total_trabajo = round(total_trabajo, 2)
+    trabajo.save()
+    tot = presupuesto.trabajos.aggregate(s=Sum("total_trabajo"))["s"] or 0
+    presupuesto.subtotal = tot
+    presupuesto.total_presupuesto = tot
+    presupuesto.save()
+
+    html = render_to_string(
+        "core/presupuestos/_tabla_trabajos.html",
+        {"presupuesto": presupuesto}
+    )
+
+    return JsonResponse({"ok": True, "tabla": html, "total": tot})
+

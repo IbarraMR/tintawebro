@@ -19,17 +19,30 @@
           {% endif %}
         </div>
       </td>
+
       <td>{{ t.cantidad }}</td>
       <td>$ {{ t.precio_unitario }}</td>
       <td><b>$ {{ t.total_trabajo }}</b></td>
+
       <td>
-        <button class="btn btn-warning btn-sm btn-editar-trabajo"  data-id="{{ t.id }}">✏️</button>
-        <button class="btn btn-danger btn-sm btn-eliminar-trabajo" data-id="{{ t.id }}">❌</button>
-        <button class="btn btn-secondary btn-sm btn-duplicar" data-id="{{ t.id }}">📄</button>
+
+        <button type="button"
+                class="btn btn-danger btn-sm btn-eliminar-trabajo"
+                data-id="{{ t.id }}">
+          ❌
+        </button>
+
+        <button type="button"
+                class="btn btn-secondary btn-sm btn-duplicar"
+                data-id="{{ t.id }}">
+          📄
+        </button>
       </td>
     </tr>
     {% empty %}
-    <tr><td colspan="5" class="text-secondary">Sin trabajos aún.</td></tr>
+    <tr>
+      <td colspan="5" class="text-secondary">Sin trabajos aún.</td>
+    </tr>
     {% endfor %}
   </tbody>
 </table>

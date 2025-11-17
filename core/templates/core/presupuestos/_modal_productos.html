@@ -1,39 +1,140 @@
 <div class="modal fade" id="modalProductos" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content" style="background:#1f1f1f;">
-      <div class="modal-header">
-        <h5 class="modal-title text-white">Seleccionar producto</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content bg-dark text-white">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title">Seleccionar producto</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                aria-label="Close"></button>
       </div>
 
       <div class="modal-body">
-        <table class="table table-dark table-hover">
-          <thead>
-            <tr>
-              <th>Producto</th>
-              <th>Precio</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for p in productos %}
-            <tr>
-              <td>{{ p.nombre }}</td>
-              <td>$ {{ p.precio }}</td>
-              <td>
-                <button type="button"
-                        class="btn btn-primary btn-sm seleccionar-producto"
-                        data-id="{{ p.id_producto }}">
-                  Seleccionar
-                </button>
-              </td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="3" class="text-center text-secondary">No hay productos cargados.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        {% if productos %}
+        <div class="table-responsive">
+          <table class="table table-dark table-hover align-middle mb-0">
+            <thead>
+              <tr class="text-center">
+                <th>Nombre</th>
+                <th>Tipo</th>
+                <th>Precio</th>
+                <th style="width: 120px;">Cantidad</th>
+                <th style="width: 120px;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for prod in productos %}
+              <tr>
+                <td>{{ prod.nombre }}</td>
+                <td class="text-center">
+                  {% if prod.tipo %}
+                    {{ prod.tipo.nombre_tipo }}
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td class="text-end">${{ prod.precio|floatformat:2 }}</td>
+                <td class="text-center">
+                  <input type="number"
+                         class="form-control form-control-sm input-cant-prod"
+                         value="1" min="1" step="1">
+                </td>
+                <td class="text-center">
+                  <button type="button"
+                          class="btn btn-sm btn-success btn-add-producto"
+                          data-id="{{ prod.id_producto }}"
+                          data-nombre="{{ prod.nombre|escapejs }}"
+                          data-precio="{{ prod.precio }}">
+                    Agregar
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info mb-0">
+          No hay productos cargados para seleccionar.
+        </div>
+        {% endif %}
       </div>
     </div>
   </div>
 </div>
+
+<script>
+document.addEventListener("click", async (e) => {
+  if (!e.target.classList.contains("btn-add-producto")) return;
+
+  try {
+    const btn = e.target;
+    const fila = btn.closest("tr");
+    const inputCant = fila.querySelector(".input-cant-prod");
+
+    const prodId   = btn.dataset.id;
+    const nombre   = btn.dataset.nombre;
+    const precio   = parseFloat(btn.dataset.precio || "0");
+    const cantidad = parseInt(inputCant.value || "1");
+
+    if (!precio || precio <= 0) {
+      showToast("El producto seleccionado no tiene un precio válido", "danger");
+      return;
+    }
+
+    const presupuestoId = await asegurarPresupuestoId();
+
+    const token = document.querySelector("input[name='csrfmiddlewaretoken']").value;
+    const form = new URLSearchParams();
+    form.append("csrfmiddlewaretoken", token);
+
+    form.append("nombre_trabajo", nombre);
+    form.append("descripcion_trabajo", `Producto: ${nombre}`);
+    form.append("cantidad_trabajo", cantidad.toString());
+
+    form.append("costo_diseno_trabajo", precio.toString());
+    form.append("margen_trabajo", "0");
+
+    form.append("producto_id", prodId);
+
+    const res = await fetch(
+      "{% url 'agregar_trabajo' 0 %}".replace("0", presupuestoId),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form.toString(),
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error("Respuesta no válida del servidor");
+    }
+
+    const data = await res.json();
+
+    const wrapper = document.getElementById("tabla-trabajos-wrapper");
+    if (wrapper && data.tabla) {
+      wrapper.innerHTML = data.tabla;
+    }
+
+    const totalSpan = document.getElementById("presupuesto-total");
+    if (totalSpan && data.total) {
+      totalSpan.textContent = data.total;
+    }
+
+    if (typeof actualizarBotonFinalizar === "function") {
+      actualizarBotonFinalizar();
+    }
+
+    // Cierro el modal
+    const modalEl = document.getElementById("modalProductos");
+    if (modalEl && window.bootstrap) {
+      const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+      modal.hide();
+    }
+
+    showToast("Producto agregado al presupuesto ✅");
+  } catch (err) {
+    console.error(err);
+    showToast("No se pudo agregar el producto al presupuesto", "danger");
+  }
+});
+</script>

@@ -10,7 +10,7 @@
     <h2 class="text-white">Vista previa del PDF</h2>
     <p class="text-secondary">Presupuesto #{{ presupuesto.id_presupuesto }}</p>
 
-    <form method="post">
+    <form method="post" action="{% url 'generar_pdf_presupuesto' presupuesto.id_presupuesto %}">
         {% csrf_token %}
 
         <div class="row">
