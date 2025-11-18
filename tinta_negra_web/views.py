@@ -2024,12 +2024,20 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
     estado_anterior = pedido.id_estado.nombre_estado if pedido.id_estado else None
 
     from django.utils import timezone
-    from core.models import TrabajoInsumo, StockMovimientos, Trabajo
+    from core.models import (
+        TrabajoInsumo,
+        StockMovimientos,
+        Trabajo,
+        Productos,
+        ProductoInsumo,
+        PedidosProductos
+    )
+
 
     if nuevo_estado == "ENTREGADO":
 
         pedido.fecha_entrega_real = timezone.now().date()
-        pedido.fecha_pedido = pedido.fecha_entrega_real
+        pedido.fecha_pedido = pedido.fecha_entrega_real 
         pedido.id_estado = estado
         pedido.save()
 
@@ -2039,46 +2047,138 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
             "fecha_entrega_real": pedido.fecha_entrega_real.strftime("%d/%m/%Y")
         })
 
-
     if nuevo_estado == "EN PRODUCCIÓN":
+
+        if not pedido.stock_descontado:
+
+            detalles = pedido.detalles.all()
+            for det in detalles:
+
+                insumo = det.insumo
+                factor = float(insumo.factor_conversion or 1)
+                cantidad_real = float(det.cantidad) / factor
+
+                insumo.stock_actual -= cantidad_real
+                if insumo.stock_actual < 0:
+                    insumo.stock_actual = 0
+                insumo.save()
+
+                StockMovimientos.objects.create(
+                    insumo=insumo,
+                    tipo="salida",
+                    cantidad=cantidad_real,
+                    detalle=f"Uso en Pedido #{pedido.id_pedido}"
+                )
+
+            productos_pedido = PedidosProductos.objects.filter(pedido=pedido)
+
+            for item in productos_pedido:
+
+                producto = item.producto
+
+                if producto.tipo and producto.tipo.nombre_tipo.upper() == "TERCERIZADO":
+
+                    producto.stock_actual -= item.cantidad
+                    if producto.stock_actual < 0:
+                        producto.stock_actual = 0
+                    producto.save()
+
+            for item in productos_pedido:
+
+                producto = item.producto
+
+                if producto.tipo and producto.tipo.nombre_tipo.upper() == "PERSONALIZADO":
+
+                    insumos_producto = ProductoInsumo.objects.filter(producto=producto)
+
+                    for pi in insumos_producto:
+
+                        insumo = pi.insumo
+                        factor = float(insumo.factor_conversion or 1)
+                        cantidad_real = (float(pi.cantidad) * item.cantidad) / factor
+                        insumo.stock_actual -= cantidad_real
+                        if insumo.stock_actual < 0:
+                            insumo.stock_actual = 0
+                        insumo.save()
+
+                        StockMovimientos.objects.create(
+                            insumo=insumo,
+                            tipo="salida",
+                            cantidad=cantidad_real,
+                            detalle=f"Consumo en Producto Personalizado (Pedido #{pedido.id_pedido})"
+                        )
+
+            pedido.stock_descontado = True
+
         pedido.id_estado = estado
         pedido.save()
 
         return JsonResponse({
             "success": True,
             "nuevo_estado": estado.nombre_estado,
-            "nota": "Stock ya estaba descontado al confirmar presupuesto."
+            "nota": "Stock descontado correctamente."
         })
+
 
     if nuevo_estado == "CANCELADO":
 
-        if not pedido.stock_descontado:
-            return JsonResponse({
-                "success": True,
-                "nuevo_estado": estado.nombre_estado,
-                "nota": "No se devolvió stock porque nunca fue descontado."
-            })
+        if pedido.stock_descontado:
 
-        detalles = pedido.detalles.all()
+            detalles = pedido.detalles.all()
+            for det in detalles:
 
-        for det in detalles:
+                insumo = det.insumo
+                factor = float(insumo.factor_conversion or 1)
+                cantidad_real = float(det.cantidad) / factor
 
-            insumo = det.insumo
-            factor = float(insumo.factor_conversion or 1)
-            cantidad_real = float(det.cantidad) / factor
+                insumo.stock_actual += cantidad_real
+                insumo.save()
 
-            stock_antes = float(insumo.stock_actual or 0)
-            insumo.stock_actual = stock_antes + cantidad_real
-            insumo.save()
+                StockMovimientos.objects.create(
+                    insumo=insumo,
+                    tipo="entrada",
+                    cantidad=cantidad_real,
+                    detalle=f"Devolución por cancelación de Pedido #{pedido.id_pedido}"
+                )
 
-            StockMovimientos.objects.create(
-                insumo=insumo,
-                tipo="entrada",
-                cantidad=cantidad_real,
-                detalle=f"Devolución por cancelación del Pedido #{pedido.id_pedido}"
-            )
 
-        pedido.stock_descontado = False
+            productos_pedido = PedidosProductos.objects.filter(pedido=pedido)
+
+            for item in productos_pedido:
+
+                producto = item.producto
+
+                if producto.tipo and producto.tipo.nombre_tipo.upper() == "TERCERIZADO":
+
+                    producto.stock_actual += item.cantidad
+                    producto.save()
+
+            for item in productos_pedido:
+
+                producto = item.producto
+
+                if producto.tipo and producto.tipo.nombre_tipo.upper() == "PERSONALIZADO":
+
+                    insumos_producto = ProductoInsumo.objects.filter(producto=producto)
+
+                    for pi in insumos_producto:
+
+                        insumo = pi.insumo
+                        factor = float(insumo.factor_conversion or 1)
+                        cantidad_real = (float(pi.cantidad) * item.cantidad) / factor
+
+                        insumo.stock_actual += cantidad_real
+                        insumo.save()
+
+                        StockMovimientos.objects.create(
+                            insumo=insumo,
+                            tipo="entrada",
+                            cantidad=cantidad_real,
+                            detalle=f"Devolución Producto Personalizado (Pedido #{pedido.id_pedido})"
+                        )
+
+            pedido.stock_descontado = False
+
         pedido.id_estado = estado
         pedido.save()
 
@@ -2095,7 +2195,6 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
         "success": True,
         "nuevo_estado": estado.nombre_estado
     })
-
 
 
 

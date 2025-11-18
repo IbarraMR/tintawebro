@@ -5,9 +5,6 @@ from django.conf import settings
 from django.core.validators import RegexValidator, EmailValidator
 
 
-# ======================================================================
-# CAJA
-# ======================================================================
 class Cajas(models.Model):
     id_caja = models.AutoField(primary_key=True)
     id_empleado = models.ForeignKey("Empleados", on_delete=models.PROTECT)
@@ -36,9 +33,6 @@ class Cajas(models.Model):
         return (self.saldo_inicial + ingresos - egresos)
 
 
-# ======================================================================
-# FORMAS DE PAGO
-# ======================================================================
 class FormaPago(models.Model):
     id_forma = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=100, unique=True)
@@ -53,9 +47,6 @@ class FormaPago(models.Model):
         return self.nombre
 
 
-# ======================================================================
-# MOVIMIENTOS DE CAJA
-# ======================================================================
 class MovimientosCaja(models.Model):
     class Tipo(models.TextChoices):
         INGRESO = "INGRESO", "Ingreso"
@@ -108,9 +99,6 @@ class AuditoriaCaja(models.Model):
         verbose_name_plural = "Auditoría de Caja"
 
 
-# ======================================================================
-# CLIENTES
-# ======================================================================
 class Cliente(models.Model):
     solo_numeros = RegexValidator(r'^\d+$', 'Solo se permiten números.')
     id_cliente = models.AutoField(primary_key=True)
@@ -130,9 +118,6 @@ class Cliente(models.Model):
         verbose_name_plural = "Clientes"
 
 
-# ======================================================================
-# PROVEEDORES
-# ======================================================================
 class Proveedores(models.Model):
     id_proveedor = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=100, unique=True)
@@ -153,9 +138,7 @@ class Proveedores(models.Model):
         return self.nombre
 
 
-# ======================================================================
-# INSUMOS
-# ======================================================================
+
 class UnidadMedida(models.Model):
     id = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=40)
@@ -184,9 +167,7 @@ class Insumos(models.Model):
     def __str__(self):
         return f"{self.nombre} ({self.unidad_medida or ''})"
 
-# ======================================================================
-# EMPLEADOS
-# ======================================================================
+
 class Empleados(models.Model):
     id_empleado = models.AutoField(primary_key=True)
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
@@ -228,9 +209,6 @@ class EstadosPedidos(models.Model):
         return self.nombre_estado
 
 
-# ======================================================================
-# PEDIDOS / PAGOS / PRESUPUESTOS / PRODUCTOS
-# ======================================================================
 class Pedidos(models.Model):
     id_pedido = models.AutoField(primary_key=True)
     id_cliente = models.ForeignKey(Cliente, models.PROTECT, db_column="id_cliente")
@@ -260,8 +238,6 @@ class TiposProducto(models.Model):
 
 
 
-
-
 class Productos(models.Model):
     id_producto = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=120)
@@ -277,14 +253,14 @@ class Productos(models.Model):
     )
     costo_diseno = models.DecimalField(max_digits=10, decimal_places=2)
     margen_ganancia = models.DecimalField(max_digits=5, decimal_places=2)
+    stock_actual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    stock_minimo = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     class Meta:
         db_table = "productos"
 
     def __str__(self):
         return self.nombre
-
-
 
 
 
@@ -320,7 +296,6 @@ class ProductosInsumos(models.Model):
         return f"{self.producto} → {self.insumo} ({self.cantidad})"
 
 
-
 class Presupuestos(models.Model):
     id_presupuesto = models.AutoField(primary_key=True)
     id_cliente = models.ForeignKey(Cliente,models.PROTECT,db_column="id_cliente",null=True, blank=True)
@@ -345,7 +320,6 @@ class Presupuestos(models.Model):
         verbose_name_plural = "Presupuestos"
 
 
-
 class PresupuestosInsumos(models.Model):
     id_detalle = models.AutoField(primary_key=True)
     presupuesto = models.ForeignKey(Presupuestos, models.CASCADE, db_column="id_presupuesto")
@@ -365,9 +339,6 @@ class PresupuestosInsumos(models.Model):
         return self.cantidad * self.precio_unitario
 
 
-
-
-
 class Pagos(models.Model):
     id_pago = models.AutoField(primary_key=True)
     id_pedido = models.ForeignKey(Pedidos, on_delete=models.SET_NULL, null=True, blank=True)
@@ -380,9 +351,6 @@ class Pagos(models.Model):
         verbose_name_plural = "Pagos"
 
 
-# ======================================================================
-# DETALLE DE COMPRA
-# ======================================================================
 class Compras(models.Model):
     id_compra = models.AutoField(primary_key=True)
     proveedor = models.ForeignKey("Proveedores", on_delete=models.PROTECT)
@@ -497,7 +465,6 @@ class PresupuestosProductos(models.Model):
 from django.db import models
 
 
-# --- NUEVOS MODELOS PARA TRABAJOS ---
 class Trabajo(models.Model):
     id = models.AutoField(primary_key=True)
     presupuesto = models.ForeignKey(Presupuestos, on_delete=models.CASCADE, related_name="trabajos", db_column="id_presupuesto")
