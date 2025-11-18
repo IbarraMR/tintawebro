@@ -1741,9 +1741,9 @@ def crear_presupuesto_borrador(request):
 @login_required
 @require_POST
 @transaction.atomic
-def agregar_trabajo(request, id_presupuesto):
+def agregar_trabajo(request, presupuesto_id):   
     try:
-        presupuesto = Presupuestos.objects.get(id_presupuesto=id_presupuesto)
+        presupuesto = Presupuestos.objects.get(id_presupuesto=presupuesto_id)
     except Presupuestos.DoesNotExist:
         return JsonResponse({"ok": False, "error": "Presupuesto no encontrado."}, status=404)
 
@@ -1755,6 +1755,7 @@ def agregar_trabajo(request, id_presupuesto):
 
     nombre = (request.POST.get("nombre_trabajo") or "").strip()
     descripcion = request.POST.get("descripcion_trabajo") or ""
+
     try:
         cantidad = int(request.POST.get("cantidad_trabajo") or 1)
     except ValueError:
