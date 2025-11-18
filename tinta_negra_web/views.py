@@ -1119,22 +1119,25 @@ def presupuesto_set_cliente(request, presupuesto_id):
     return JsonResponse({"ok": True})
 
 
-
 @login_required
 def configuracion(request):
     empleado = Empleados.objects.filter(user=request.user).first()
-
     if not empleado:
         messages.error(request, "No se encontró el perfil del empleado.")
         return redirect("home")
 
     empresa = ConfiguracionEmpresa.objects.first()
+    if not empresa:
+        empresa = ConfiguracionEmpresa.objects.create()
+    else:
+        empresa.refresh_from_db()
 
     return render(request, "core/configuracion.html", {
         "empleado": empleado,
         "empresa": empresa,
-        "user_email": request.user.email, 
+        "user_email": request.user.email,
     })
+
 
 
 
@@ -1520,12 +1523,10 @@ def presupuesto_edit(request, presupuesto_id):
         "title": "Editar presupuesto",
     })
 
-
-
+from django.urls import reverse
 @login_required
 def configuracion_empresa(request):
     empresa = ConfiguracionEmpresa.objects.first()
-
     if not empresa:
         empresa = ConfiguracionEmpresa.objects.create()
 
@@ -1534,21 +1535,20 @@ def configuracion_empresa(request):
         empresa.direccion = request.POST.get("direccion")
         empresa.telefono = request.POST.get("telefono")
         empresa.email = request.POST.get("email")
-        empresa.condiciones = request.POST.get("condiciones")
+        empresa.condiciones_pago = request.POST.get("condiciones_pago")
         empresa.otros_detalles = request.POST.get("otros_detalles")
 
         if request.FILES.get("logo"):
             empresa.logo = request.FILES["logo"]
 
         empresa.save()
-        messages.success(request, "Datos de empresa guardados correctamente.")
-        return redirect("configuracion") 
 
-    return render(request, "core/configuracion.html", {
-        "empresa": empresa,
-        "empleado": Empleados.objects.filter(user=request.user).first(),
-        "email_cfg": ConfiguracionEmail.objects.first(),
-    })
+        messages.success(request, "Datos de empresa guardados correctamente.")
+
+        url = reverse("configuracion") + "?tab=empresa"
+        return redirect(url)
+    return redirect("configuracion")
+
 
 
 
@@ -2555,10 +2555,10 @@ def configuracion_perfil(request):
         empleado.telefono = request.POST.get("telefono")
         empleado.direccion = request.POST.get("direccion")
         empleado.save()
-
         request.user.email = request.POST.get("email")
         request.user.save()
-
+        empleado.refresh_from_db()
+        request.user.refresh_from_db()
         messages.success(request, "Perfil actualizado correctamente.")
         return redirect("configuracion")
 
@@ -2567,16 +2567,15 @@ def configuracion_perfil(request):
 
 
 
+from django.contrib.auth import update_session_auth_hash
 @login_required
 def configuracion_password(request):
-
     if request.method == "POST":
         user = request.user
 
         actual = request.POST.get("password_actual")
         nueva = request.POST.get("password_nueva")
         confirm = request.POST.get("password_confirm")
-
         if not user.check_password(actual):
             messages.error(request, "La contraseña actual es incorrecta.")
             return redirect("configuracion")
@@ -2587,9 +2586,9 @@ def configuracion_password(request):
 
         user.set_password(nueva)
         user.save()
-
+        update_session_auth_hash(request, user)
         messages.success(request, "Contraseña actualizada correctamente.")
-        return redirect("login")
+        return redirect("configuracion")
 
     return redirect("configuracion")
 
