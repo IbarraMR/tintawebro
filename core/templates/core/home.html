@@ -10,7 +10,6 @@
 
 <div class="row g-4 mb-4">
 
-    <!-- CAJA ACTUAL -->
     <div class="col-lg-6">
         <div class="p-4 h-100" style="background:#151515; border:1px solid #2b2b2b; border-radius:10px;">
             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -37,7 +36,6 @@
         </div>
     </div>
 
-    <!-- PEDIDOS PENDIENTES -->
     <div class="col-lg-6">
         <div class="p-4 h-100" style="background:#151515; border:1px solid #2b2b2b; border-radius:10px;">
             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -67,10 +65,8 @@
 
 </div>
 
-<!-- VENTAS + STOCK MINIMO -->
 <div class="row g-4 mb-4">
 
-    <!-- GRAFICO VENTAS -->
     <div class="col-lg-8">
         <div class="p-4 h-100" style="background:#151515; border:1px solid #2b2b2b; border-radius:10px;">
 
@@ -79,19 +75,16 @@
 
                 <div class="d-flex align-items-center gap-2">
 
-                    <!-- Botones -->
                     <div class="btn-group btn-group-sm">
                         <button class="btn btn-outline-light filtro" data-filtro="diario">Diario</button>
                         <button class="btn btn-outline-light filtro active" data-filtro="mensual">Mensual</button>
                         <button class="btn btn-outline-light filtro" data-filtro="anual">Anual</button>
                     </div>
 
-                    <!-- PDF -->
                     <a id="btnPDF" class="btn btn-outline-success btn-sm">
                         <i class="fas fa-file-pdf"></i>
                     </a>
 
-                    <!-- Selector MES -->
                     <input type="month" id="selectorMes"
                         class="form-control form-control-sm"
                         style="width: 120px; background:#222; color:white;">
@@ -104,7 +97,6 @@
         </div>
     </div>
 
-    <!-- STOCK MÍNIMO -->
     <div class="col-lg-4">
         <div class="p-4 h-100" style="background:#151515; border:1px solid #2b2b2b; border-radius:10px;">
             <h5 class="text-white mb-3">Stock mínimo</h5>
@@ -136,7 +128,6 @@
 
 </div>
 
-<!-- PEDIDOS RECIENTES -->
 <div class="row g-4">
     <div class="col-12">
         <div class="p-4" style="background:#151515; border:1px solid #2b2b2b; border-radius:10px;">
@@ -170,7 +161,6 @@
     </div>
 </div>
 
-<!-- SCRIPTS -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
@@ -180,18 +170,12 @@ const ctx = document.getElementById("graficoVentas").getContext("2d");
 const selectorMes = document.getElementById("selectorMes");
 const btnPDF = document.getElementById("btnPDF");
 
-// -------------------------------------------------------
-// 🔥 Mes actual por defecto
-// -------------------------------------------------------
 const hoy = new Date();
 const yyyy = hoy.getFullYear();
 const mm = ("0" + (hoy.getMonth() + 1)).slice(-2);
 const mesActual = `${yyyy}-${mm}`;
 selectorMes.value = mesActual;
 
-// -------------------------------------------------------
-// 🔥 Cargar gráfico por FILTRO (diario / mensual / anual)
-// -------------------------------------------------------
 function cargarGraficoFiltro(filtro) {
     fetch(`/api/grafico/ventas/?filtro=${filtro}`)
         .then(res => res.json())
@@ -225,9 +209,6 @@ function cargarGraficoFiltro(filtro) {
         });
 }
 
-// -------------------------------------------------------
-// 🔥 Cargar gráfico por MES
-// -------------------------------------------------------
 function cargarGraficoMes(mes) {
     fetch(`/api/grafico/ventas/?mes=${mes}`)
         .then(r => r.json())
@@ -253,9 +234,7 @@ function cargarGraficoMes(mes) {
         });
 }
 
-// -------------------------------------------------------
-// 🔥 Botones: Diario / Mensual / Anual
-// -------------------------------------------------------
+
 document.querySelectorAll(".filtro").forEach(btn => {
     btn.addEventListener("click", () => {
 
@@ -270,18 +249,12 @@ document.querySelectorAll(".filtro").forEach(btn => {
     });
 });
 
-// -------------------------------------------------------
-// 🔥 Selector de mes
-// -------------------------------------------------------
 selectorMes.addEventListener("change", function () {
     const mes = this.value;
     btnPDF.href = `/reportes/ventas/pdf/?mes=${mes}`;
     cargarGraficoMes(mes);
 });
 
-// -------------------------------------------------------
-// 🔥 Carga inicial
-// -------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
     btnPDF.href = `/reportes/ventas/pdf/?mes=${mesActual}`;
     cargarGraficoMes(mesActual);

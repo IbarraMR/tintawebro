@@ -42,7 +42,6 @@
 
         <ul class="nav flex-column">
 
-            <!-- DASHBOARD -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'home' %}active{% endif %}"
                    href="{% url 'home' %}">
@@ -50,7 +49,6 @@
                 </a>
             </li>
 
-            <!-- CLIENTES -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'clientes_list' %}active{% endif %}"
                    href="{% url 'clientes_list' %}">
@@ -58,7 +56,6 @@
                 </a>
             </li>
 
-            <!-- PEDIDOS -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'pedidos_list' %}active{% endif %}"
                    href="{% url 'pedidos_list' %}">
@@ -66,7 +63,6 @@
                 </a>
             </li>
 
-            <!-- PRESUPUESTOS -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'presupuestos_list' %}active{% endif %}"
                    href="{% url 'presupuestos_list' %}">
@@ -74,7 +70,6 @@
                 </a>
             </li>
 
-            <!-- PRODUCTOS -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'productos_list' %}active{% endif %}"
                    href="{% url 'productos_list' %}">
@@ -82,7 +77,6 @@
                 </a>
             </li>
 
-            <!-- COMPRAS -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'compras_list' %}active{% endif %}"
                    href="{% url 'compras_list' %}">
@@ -90,7 +84,6 @@
                 </a>
             </li>
 
-            <!-- INSUMOS -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'insumos_list' %}active{% endif %}"
                    href="{% url 'insumos_list' %}">
@@ -98,7 +91,6 @@
                 </a>
             </li>
 
-            <!-- ============= CAJA (SUBMENÚ SIEMPRE VISIBLE) ============= -->
             <li class="nav-item mb-1">
                 <span class="nav-link text-white">
                     <i class="fas fa-cash-register fa-sm me-2"></i> Caja
@@ -132,9 +124,7 @@
                     </ul>
                 </div>
             </li>
-            <!-- ============= FIN CAJA ============= -->
 
-            <!-- PROVEEDORES -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'proveedores_list' %}active{% endif %}"
                    href="{% url 'proveedores_list' %}">
@@ -142,8 +132,7 @@
                 </a>
             </li>
 
-            <!-- EMPLEADOS -->
-            {% if "Jefe" in request.user.groups.all %}
+            {% if "Jefe" in request.user.groups.all|join:", " %}
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'empleados_list' %}active{% endif %}"
                 href="{% url 'empleados_list' %}">
@@ -152,8 +141,6 @@
             </li>
             {% endif %}
 
-
-            <!-- CONFIGURACIÓN -->
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'configuracion' %}active{% endif %}"
                 href="{% url 'configuracion' %}">

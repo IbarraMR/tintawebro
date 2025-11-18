@@ -15,9 +15,6 @@
            value="{{ presupuesto.id_presupuesto|default:'' }}">
     <input type="hidden" id="editar_trabajo_id" name="editar_trabajo_id" value="">
 
-    <!-- ================================
-         DATOS PRINCIPALES
-    ================================= -->
     <div class="row g-3 mb-4">
       <div class="col-md-4">
         <label class="form-label text-white">Cliente</label>
@@ -28,9 +25,6 @@
         </div>
       </div>
 
-      <!-- ================================
-           SCRIPT PARA GUARDAR EL CLIENTE
-      ================================= -->
       <script>
       document.addEventListener("DOMContentLoaded", () => {
 
@@ -104,9 +98,6 @@
 
     <hr class="text-secondary mb-4">
 
-    <!-- ================================
-         TABS (TRABAJO / PRODUCTO)
-    ================================= -->
     <ul class="nav nav-tabs mb-4" id="tabTipoTrabajo">
       <li class="nav-item">
         <button class="nav-link active fw-bold" id="tab-trabajo" data-tipo="trabajo">
@@ -120,9 +111,6 @@
       </li>
     </ul>
 
-    <!-- ================================
-         TRABAJO PERSONALIZADO
-    ================================= -->
     <div id="seccion-trabajo" class="p-3 bg-black rounded shadow-sm">
 
       <div class="row g-3">
@@ -154,7 +142,6 @@
                   placeholder="Opcional: detalles del trabajo"></textarea>
       </div>
 
-      <!-- TABLA INSUMOS -->
       <h4 class="text-white mt-4">Insumos del trabajo</h4>
 
       <table class="table table-dark table-bordered table-sm mt-2">
@@ -185,9 +172,7 @@
       </button>
 
     </div>
-    <!-- ================================
-         PRODUCTO DEL CATÁLOGO
-    ================================= -->
+
     <div id="seccion-producto" class="d-none mt-4 p-3 bg-black rounded shadow-sm">
       <h5 class="text-white mb-3">Seleccionar producto del catálogo</h5>
 
@@ -240,9 +225,7 @@
 
     <hr class="text-secondary mt-4">
 
-    <!-- ================================
-         TABLA DE TRABAJOS AGREGADOS
-    ================================= -->
+
     <h4 class="text-white mt-3">Trabajos agregados</h4>
 
     <div id="contenedor-tabla-trabajos">
@@ -272,9 +255,7 @@
   </form>
 </div>
 
-<!-- ============================================================
-     TEMPLATE FILA DE INSUMO
-============================================================ -->
+
 <script type="text/template" id="template-insumo">
 <tr class="insumo-row">
   <td>
@@ -312,15 +293,11 @@
 </tr>
 </script>
 
-<!-- ============================================================
-     TABS + BUSCADOR + PAGINACIÓN PRODUCTOS
-============================================================ -->
+
 <script>
 document.addEventListener("DOMContentLoaded", () => {
 
-  /* ================================
-       TABS TRABAJO / PRODUCTO
-  ================================= */
+
   const tabTrabajo = document.getElementById("tab-trabajo");
   const tabProducto = document.getElementById("tab-producto");
   const secTrabajo = document.getElementById("seccion-trabajo");
@@ -345,9 +322,7 @@ document.addEventListener("DOMContentLoaded", () => {
   tabTrabajo.addEventListener("click", activarTrabajo);
   tabProducto.addEventListener("click", activarProducto);
 
-  /* ================================
-       BUSCADOR + PAGINACIÓN PRODUCTOS
-  ================================= */
+
   const filas = Array.from(document.querySelectorAll(".producto-item"));
   const tablaBody = document.getElementById("productosBody");
   const paginacion = document.getElementById("paginacionProductos");
@@ -397,17 +372,13 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 </script>
 
-<!-- ============================================================
-     AGREGAR PRODUCTO / TRABAJO
-============================================================ -->
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
 
   const presupuestoId = document.getElementById("presupuesto_id")?.value;
 
-  /* ============================================================
-       Helper general
-  ============================================================ */
+
   function actualizarTablaTrabajo(data) {
     const cont = document.getElementById("contenedor-tabla-trabajos");
     if (cont && data.tabla) cont.innerHTML = data.tabla;
@@ -425,9 +396,7 @@ document.addEventListener("DOMContentLoaded", function () {
     initAccionesTablaTrabajos();
   }
 
-  /* ============================================================
-       AGREGAR PRODUCTO
-  ============================================================ */
+
   function initAgregarProducto() {
     document.querySelectorAll(".btn-add-producto").forEach(btn => {
       btn.addEventListener("click", function (e) {
@@ -457,9 +426,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
- /* ============================================================
-     AGREGAR TRABAJO
-============================================================ */
+
 function initAgregarTrabajo() {
     const btn = document.getElementById("btnAddTrabajo");
 
@@ -528,12 +495,9 @@ function initAgregarTrabajo() {
     });
 }
 
-  /* ============================================================
-       ACCIONES TABLA TRABAJOS
-  ============================================================ */
+
   function initAccionesTablaTrabajos() {
 
-    // Eliminar
     document.querySelectorAll(".btn-eliminar-trabajo").forEach(btn => {
       btn.addEventListener("click", function () {
         if (!confirm("¿Eliminar este trabajo?")) return;
@@ -573,9 +537,6 @@ function initAgregarTrabajo() {
 });
 </script>
 
-<!-- ============================================================
-     CÁLCULO DE INSUMOS
-============================================================ -->
 <script>
 document.addEventListener("DOMContentLoaded", () => {
 

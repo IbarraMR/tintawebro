@@ -10,7 +10,6 @@
 
 <div class="row g-4 mb-4">
 
-    <!-- CAJA ACTUAL (el empleado sí tiene acceso) -->
     {% if puede_ver_caja %}
     <div class="col-lg-6">
         <div class="p-4 h-100" style="background:#151515; border:1px solid #2b2b2b; border-radius:10px;">
@@ -40,7 +39,6 @@
     </div>
     {% endif %}
 
-    <!-- PEDIDOS PENDIENTES -->
     {% if perms.core.view_pedidos %}
     <div class="col-lg-6">
         <div class="p-4 h-100"
@@ -74,10 +72,8 @@
 
 </div>
 
-<!-- GRAFICO + INSUMOS CRÍTICOS -->
 <div class="row g-4 mb-4">
 
-    <!-- GRAFICO VENTAS -->
     <div class="col-lg-8">
         <div class="p-4 h-100"
              style="background:#151515; border:1px solid #2b2b2b; border-radius:10px;">
@@ -98,7 +94,6 @@
         </div>
     </div>
 
-    <!-- INSUMOS CRÍTICOS -->
     {% if perms.core.view_insumos %}
     <div class="col-lg-4">
         <div class="p-4 h-100"
@@ -137,7 +132,6 @@
 
 </div>
 
-<!-- PEDIDOS RECIENTES -->
 <div class="row g-4">
     <div class="col-12">
         <div class="p-4"
@@ -173,7 +167,6 @@
     </div>
 </div>
 
-<!-- SCRIPTS -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>

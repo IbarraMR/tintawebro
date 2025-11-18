@@ -8,7 +8,6 @@
 
     <h2 class="mb-3">Historial de Movimientos de Caja</h2>
 
-    <!-- ==================== FILTROS ==================== -->
     <div class="d-flex justify-content-between mb-3">
         <form method="GET" class="d-flex gap-2 mb-3">
 
@@ -40,7 +39,6 @@
         </a>
     </div>
 
-    <!-- ==================== TABLA ==================== -->
     <table class="table table-dark table-striped mt-3" id="tablaMovimientos">
         <thead>
             <tr>
@@ -74,7 +72,6 @@
         </tbody>
     </table>
 
-    <!-- ==================== PAGINACIÓN ==================== -->
     <nav aria-label="Paginación" class="mt-3">
         <ul class="pagination justify-content-center">
             {% if movs.has_previous %}
@@ -95,7 +92,6 @@
 
 </div>
 
-<!-- MODAL: Nuevo Movimiento -->
 <div class="modal fade" id="modalMovimiento" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content bg-dark text-white">
@@ -110,7 +106,6 @@
 
         <div class="modal-body">
 
-          <!-- Tipo -->
           <div class="mb-3">
             <label class="form-label">Tipo</label>
             <select name="tipo" class="form-select" required>
@@ -119,13 +114,11 @@
             </select>
           </div>
 
-          <!-- Monto -->
           <div class="mb-3">
             <label class="form-label">Monto</label>
             <input type="number" name="monto" class="form-control" step="0.01" required>
           </div>
 
-          <!-- Forma de pago -->
           <div class="mb-3">
             <label class="form-label">Forma de Pago</label>
             <select name="forma_pago" class="form-select" required>
@@ -135,7 +128,6 @@
             </select>
           </div>
 
-          <!-- Descripción -->
           <div class="mb-3">
             <label class="form-label">Descripción</label>
             <textarea name="descripcion" class="form-control" rows="3"></textarea>
@@ -182,19 +174,16 @@ document.addEventListener("DOMContentLoaded", function () {
             return;
         }
 
-        // ❌ Error en backend
         if (!response.ok) {
             alert("⚠️ " + (data.error || "Datos inválidos"));
             return;
         }
 
-        // ❌ Backend respondió error lógico
         if (data.error) {
             alert("⚠️ " + data.error);
             return;
         }
 
-        // ✔️ Todo OK → insertar fila
         const nuevaFila = `
             <tr>
                 <td>${data.mov.id}</td>
