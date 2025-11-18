@@ -1,112 +1,258 @@
 {% extends 'core/base.html' %}
 {% load static %}
+{% load humanize %}
 
-{% block title %}Mi Dashboard - Empleado{% endblock %}
+{% block title %}Panel de control{% endblock %}
 
 {% block content %}
-    
-    <h2 class="mb-4 text-white">Bienvenido, {{ request.user.username|title }}</h2>
-    <p class="text-secondary mb-5">Aquí encontrarás un resumen de tus tareas y el estado general del stock.</p>
 
-    <div class="row g-4 mb-5">
+<h2 class="mb-4 text-white">Panel de control</h2>
 
-        <div class="col-xl-3 col-md-6">
-            <div class="dashboard-card border-warning position-relative">
-                <div class="d-flex align-items-center">
-                    <i class="fas fa-clipboard-list fa-3x text-warning me-3"></i>
-                    <div>
-                        <div class="text-uppercase text-secondary small">Mis Pedidos Pendientes</div>
-                        <h3 class="mb-0 text-white">{{ pedidos_pendientes_count }}</h3> 
-                    </div>
-                </div>
-                <a href="{% url 'pedidos_list' %}" class="stretched-link small text-secondary mt-2 d-block">Ver pedidos</a>
-            </div>
-        </div>
+<div class="row g-4 mb-4">
 
-        
-        <div class="col-xl-3 col-md-6">
-            <div class="dashboard-card border-danger position-relative">
-                <div class="d-flex align-items-center">
-                    <i class="fas fa-triangle-exclamation fa-3x text-danger me-3"></i>
-                    <div>
-                        <div class="text-uppercase text-secondary small">Insumos Críticos</div>
-                        <h3 class="mb-0 text-white">{{ insumos_criticos_count }}</h3> 
-                    </div>
-                </div>
-                <a href="{% url 'insumos_list' %}" class="stretched-link small text-secondary mt-2 d-block">Revisar stock</a>
-            </div>
-        </div>
+    <!-- CAJA ACTUAL (el empleado sí tiene acceso) -->
+    {% if puede_ver_caja %}
+    <div class="col-lg-6">
+        <div class="p-4 h-100" style="background:#151515; border:1px solid #2b2b2b; border-radius:10px;">
+            
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                    <div class="text-uppercase text-secondary small">Caja actual</div>
 
-        
-        <div class="col-xl-3 col-md-6">
-            <div class="dashboard-card border-info position-relative">
-                <div class="d-flex align-items-center">
-                    <i class="fas fa-users fa-3x text-info me-3"></i>
-                    <div>
-                        <div class="text-uppercase text-secondary small">Clientes Activos</div>
-                        <h3 class="mb-0 text-white">{{ clientes_total_count }}</h3> 
-                    </div>
-                </div>
-                <a href="{% url 'clientes_list' %}" class="stretched-link small text-secondary mt-2 d-block">Ver listado</a>
-            </div>
-        </div>
-
-    </div>
-
-    <div class="row mt-4">
-        <div class="col-lg-12">
-            <div class="p-4" style="background-color: #1f1f1f; border-radius: 8px; border: 1px solid #333333;">
-                <h5 class="text-white mb-3">Accesos Rápidos</h5>
-                <p class="text-secondary">Utiliza estos accesos para tus tareas más frecuentes.</p>
-                <div class="d-flex flex-wrap gap-3 mt-4">
-
-                    
-                    {% if perms.core.view_pedidos %}
-                    <a href="{% url 'pedidos_list' %}" class="btn btn-lg btn-warning">
-                        <i class="fas fa-list-check me-2"></i> Gestionar Pedidos
-                    </a>
-                    {% endif %}
-
-                    
-                    {% if perms.core.add_presupuestos %}
-                    <a href="{% url 'presupuestos_list' %}" class="btn btn-lg btn-info text-white">
-                        <i class="fas fa-file-invoice-dollar me-2"></i> Crear Presupuesto
-                    </a>
-                    {% endif %}
-
-                    
-                    {% if perms.core.add_insumos %}
-                    <a href="{% url 'insumos_list' %}" class="btn btn-lg btn-success text-white">
-                        <i class="fas fa-plus me-2"></i> Añadir Stock
-                    </a>
+                    {% if caja_abierta %}
+                        <h3 class="text-success mb-1">Abierta</h3>
+                        <p class="text-info fs-4 fw-bold mb-0">
+                            ${{ saldo_actual|floatformat:2|intcomma }}
+                        </p>
+                    {% else %}
+                        <h3 class="text-danger mb-1">Cerrada</h3>
+                        <p class="text-secondary fs-5 fw-bold mb-0">
+                            Último saldo: ${{ saldo_actual|floatformat:2|intcomma }}
+                        </p>
                     {% endif %}
                 </div>
+
+                <i class="fas fa-cash-register fa-3x text-light opacity-75"></i>
             </div>
+
+            <a href="{% url 'cajas_list' %}" class="text-secondary small">Ver movimientos de caja</a>
         </div>
     </div>
+    {% endif %}
 
-    <div class="row mt-5">
-        
-        <div class="col-lg-6 mb-4">
-            <div class="p-4" style="background-color: #1f1f1f; border-radius: 8px; border: 1px solid #333333; height: 320px;">
-                <h5 class="text-white mb-3">Resumen de Actividad</h5>
-                <p class="text-secondary">Aquí podrás ver un resumen de tus pedidos y presupuestos semanales.</p>
-                <p class="text-secondary">*Esta sección podrá incluir un gráfico o lista más adelante.*</p>
+    <!-- PEDIDOS PENDIENTES -->
+    {% if perms.core.view_pedidos %}
+    <div class="col-lg-6">
+        <div class="p-4 h-100"
+             style="background:#151515; border:1px solid #2b2b2b; border-radius:10px;">
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                    <div class="text-uppercase text-secondary small">Pedidos pendientes</div>
+                    <h3 class="text-white mb-0">{{ pedidos_pendientes_count }}</h3>
+                </div>
+                <i class="fas fa-clipboard-list fa-2x text-warning"></i>
             </div>
-        </div>
 
-        
-        <div class="col-lg-6 mb-4">
-            <div class="p-4" style="background-color: #1f1f1f; border-radius: 8px; border: 1px solid #333333; height: 320px;">
-                <h5 class="text-white mb-3">Ayuda Rápida</h5>
-                <p class="text-secondary">Recordá que podés comunicarte con el encargado o revisar tus tareas asignadas desde la sección de pedidos.</p>
-                <ul class="text-secondary mt-3">
-                    <li>Revisá tu stock antes de iniciar un trabajo.</li>
-                    <li>Actualizá el estado de tus pedidos al completarlos.</li>
-                    <li>Verificá los insumos disponibles antes de presupuestar.</li>
+            {% if pedidos_pendientes %}
+                <ul class="list-unstyled small text-secondary mt-3">
+                    {% for p in pedidos_pendientes|slice:":3" %}
+                        <li class="d-flex justify-content-between text-white">
+                            #{{ p.id_pedido }} - {{ p.id_cliente.nombre }}
+                            <span>${{ p.total_pedido|floatformat:0|intcomma }}</span>
+                        </li>
+                    {% endfor %}
                 </ul>
+            {% else %}
+                <p class="text-secondary small mt-3">No hay pedidos pendientes.</p>
+            {% endif %}
+
+            <a href="{% url 'pedidos_list' %}" class="text-secondary small">Ir a pedidos</a>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- GRAFICO + INSUMOS CRÍTICOS -->
+<div class="row g-4 mb-4">
+
+    <!-- GRAFICO VENTAS -->
+    <div class="col-lg-8">
+        <div class="p-4 h-100"
+             style="background:#151515; border:1px solid #2b2b2b; border-radius:10px;">
+
+            <div class="d-flex justify-content-between mb-3">
+                <h5 class="text-white mb-0">Ventas</h5>
+
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-light filtro" data-filtro="diario">Diario</button>
+                    <button class="btn btn-outline-light filtro active" data-filtro="mensual">Mensual</button>
+                    <button class="btn btn-outline-light filtro" data-filtro="anual">Anual</button>
+                </div>
+            </div>
+
+            <div style="height:260px;">
+                <canvas id="graficoVentas"></canvas>
             </div>
         </div>
     </div>
+
+    <!-- INSUMOS CRÍTICOS -->
+    {% if perms.core.view_insumos %}
+    <div class="col-lg-4">
+        <div class="p-4 h-100"
+             style="background:#151515; border:1px solid #2b2b2b; border-radius:10px;">
+
+            <h5 class="text-white mb-3">Stock mínimo</h5>
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-secondary small">Insumos críticos</span>
+                <span class="fs-4 text-danger">{{ insumos_criticos_count }}</span>
+            </div>
+
+            {% if insumos_criticos %}
+                <ul class="list-group list-group-flush small"
+                    style="max-height:180px; overflow-y:auto;">
+                    {% for ins in insumos_criticos|slice:":5" %}
+                        <li class="list-group-item d-flex justify-content-between"
+                            style="background:#111; border-color:#222;">
+                            <span class="text-white">{{ ins.nombre }}</span>
+                            <span class="badge bg-danger">{{ ins.stock_actual }}</span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="text-secondary small">No hay insumos en alerta.</p>
+            {% endif %}
+
+            <a href="{% url 'insumos_list' %}"
+               class="btn btn-outline-danger btn-sm mt-3">
+                Revisar insumos
+            </a>
+
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- PEDIDOS RECIENTES -->
+<div class="row g-4">
+    <div class="col-12">
+        <div class="p-4"
+             style="background:#151515; border:1px solid #2b2b2b; border-radius:10px;">
+
+            <h5 class="text-white mb-3">Pedidos recientes</h5>
+
+            {% if pedidos_recientes %}
+                <table class="table table-dark table-sm text-center mb-0">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Cliente</th>
+                            <th>Estado</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for p in pedidos_recientes %}
+                        <tr>
+                            <td>#{{ p.id_pedido }}</td>
+                            <td>{{ p.id_cliente.nombre }}</td>
+                            <td>{{ p.id_estado.nombre_estado }}</td>
+                            <td>${{ p.total_pedido|floatformat:0|intcomma }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="text-secondary">No hay pedidos recientes.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- SCRIPTS -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+    let grafico = null;
+    const ctx = document.getElementById("graficoVentas");
+
+    function cargarGrafico(filtro) {
+        fetch(`/api/grafico/ventas/?filtro=${filtro}`)
+            .then(r => r.json())
+            .then(data => {
+
+                if (grafico) grafico.destroy();
+
+                grafico = new Chart(ctx, {
+                    type: "line",
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: "Ventas ($)",
+                            data: data.valores,
+                            borderColor: "rgba(0, 200, 160, 0.85)",
+                            backgroundColor: "rgba(0, 200, 160, 0.12)",
+                            borderWidth: 3,
+                            tension: 0.35,
+                            pointRadius: 4,
+                            pointHoverRadius: 7,
+                            pointBackgroundColor: "#00c8a0",
+                            pointBorderColor: "#0f0",
+                            pointHitRadius: 10,
+                            pointHoverBorderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: {
+                            duration: 900,
+                            easing: "easeOutQuart"
+                        },
+                        plugins: {
+                            legend: {
+                                labels: { color: "#ccc" }
+                            },
+                            tooltip: {
+                                backgroundColor: "rgba(20,20,20,0.95)",
+                                titleColor: "#00e6b0",
+                                bodyColor: "#fff",
+                                borderColor: "#00e6b0",
+                                borderWidth: 1
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: { color: "#aaa" },
+                                grid: { color: "rgba(255,255,255,0.05)" }
+                            },
+                            y: {
+                                ticks: { color: "#aaa" },
+                                grid: { color: "rgba(255,255,255,0.05)" }
+                            }
+                        }
+                    }
+                });
+            });
+    }
+
+    cargarGrafico("mensual");
+
+    document.querySelectorAll(".filtro").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll(".filtro").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            cargarGrafico(btn.dataset.filtro);
+        });
+    });
+
+});
+</script>
 
 {% endblock %}

@@ -37,7 +37,7 @@
 
     <div>
         <div class="sidebar-user text-white mb-3">
-            <strong>Hola {{ request.user.username|title }}!</strong>
+            <strong>Hola {{ request.user.first_name|title }}!</strong>
         </div>
 
         <ul class="nav flex-column">
@@ -143,12 +143,15 @@
             </li>
 
             <!-- EMPLEADOS -->
+            {% if "Jefe" in request.user.groups.all %}
             <li class="nav-item mb-1">
                 <a class="nav-link text-white {% if request.resolver_match.url_name == 'empleados_list' %}active{% endif %}"
-                   href="{% url 'empleados_list' %}">
+                href="{% url 'empleados_list' %}">
                     <i class="fas fa-user-tie me-2"></i> Empleados
                 </a>
             </li>
+            {% endif %}
+
 
             <!-- CONFIGURACIÓN -->
             <li class="nav-item mb-1">

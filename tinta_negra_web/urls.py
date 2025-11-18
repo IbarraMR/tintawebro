@@ -171,4 +171,6 @@ urlpatterns = [
     # 🔹 API GRÁFICO
     # ==============================
     path("api/grafico/ventas/", views.api_grafico_ventas, name="api_grafico_ventas"),
+    path("reportes/ventas/pdf/", views.reporte_ventas_pdf, name="reporte_ventas_pdf"),
+
 ]

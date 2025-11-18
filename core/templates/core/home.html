@@ -73,13 +73,28 @@
     <!-- GRAFICO VENTAS -->
     <div class="col-lg-8">
         <div class="p-4 h-100" style="background:#151515; border:1px solid #2b2b2b; border-radius:10px;">
+
             <div class="d-flex justify-content-between mb-3">
                 <h5 class="text-white mb-0">Ventas</h5>
 
-                <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-light filtro" data-filtro="diario">Diario</button>
-                    <button class="btn btn-outline-light filtro active" data-filtro="mensual">Mensual</button>
-                    <button class="btn btn-outline-light filtro" data-filtro="anual">Anual</button>
+                <div class="d-flex align-items-center gap-2">
+
+                    <!-- Botones -->
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-light filtro" data-filtro="diario">Diario</button>
+                        <button class="btn btn-outline-light filtro active" data-filtro="mensual">Mensual</button>
+                        <button class="btn btn-outline-light filtro" data-filtro="anual">Anual</button>
+                    </div>
+
+                    <!-- PDF -->
+                    <a id="btnPDF" class="btn btn-outline-success btn-sm">
+                        <i class="fas fa-file-pdf"></i>
+                    </a>
+
+                    <!-- Selector MES -->
+                    <input type="month" id="selectorMes"
+                        class="form-control form-control-sm"
+                        style="width: 120px; background:#222; color:white;">
                 </div>
             </div>
 
@@ -159,87 +174,119 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
-document.addEventListener("DOMContentLoaded", () => {
 
-    let grafico = null;
-    const ctx = document.getElementById("graficoVentas");
+let chartVentas = null;
+const ctx = document.getElementById("graficoVentas").getContext("2d");
+const selectorMes = document.getElementById("selectorMes");
+const btnPDF = document.getElementById("btnPDF");
 
-    function cargarGrafico(filtro) {
-        fetch(`/api/grafico/ventas/?filtro=${filtro}`)
-            .then(r => r.json())
-            .then(data => {
+// -------------------------------------------------------
+// 🔥 Mes actual por defecto
+// -------------------------------------------------------
+const hoy = new Date();
+const yyyy = hoy.getFullYear();
+const mm = ("0" + (hoy.getMonth() + 1)).slice(-2);
+const mesActual = `${yyyy}-${mm}`;
+selectorMes.value = mesActual;
 
-                if (grafico) grafico.destroy();
+// -------------------------------------------------------
+// 🔥 Cargar gráfico por FILTRO (diario / mensual / anual)
+// -------------------------------------------------------
+function cargarGraficoFiltro(filtro) {
+    fetch(`/api/grafico/ventas/?filtro=${filtro}`)
+        .then(res => res.json())
+        .then(data => {
+            if (chartVentas) chartVentas.destroy();
 
-                grafico = new Chart(ctx, {
-                    type: "line",
-                    data: {
-                        labels: data.labels,
-                        datasets: [{
-                            label: "Ventas ($)",
-                            data: data.valores,
-
-                            // 🎨 ESTILO PREMIUM
-                            borderColor: "rgba(0, 200, 160, 0.85)",
-                            backgroundColor: "rgba(0, 200, 160, 0.12)",
-                            borderWidth: 3,
-                            tension: 0.35,
-
-                            pointRadius: 4,
-                            pointHoverRadius: 7,
-                            pointBackgroundColor: "#00c8a0",
-                            pointBorderColor: "#0f0",
-                            pointHitRadius: 10,
-                            pointHoverBorderWidth: 2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        animation: {
-                            duration: 900,
-                            easing: "easeOutQuart"
-                        },
-                        plugins: {
-                            legend: {
-                                labels: { color: "#ccc" }
-                            },
-                            tooltip: {
-                                backgroundColor: "rgba(20,20,20,0.95)",
-                                titleColor: "#00e6b0",
-                                bodyColor: "#fff",
-                                borderColor: "#00e6b0",
-                                borderWidth: 1
-                            }
-                        },
-                        scales: {
-                            x: {
-                                ticks: { color: "#aaa" },
-                                grid: { color: "rgba(255,255,255,0.05)" }
-                            },
-                            y: {
-                                ticks: { color: "#aaa" },
-                                grid: { color: "rgba(255,255,255,0.05)" }
-                            }
-                        }
+            chartVentas = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: "Ventas ($)",
+                        data: data.valores,
+                        borderColor: "#00ff88",
+                        backgroundColor: "rgba(0,255,136,0.15)",
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointBackgroundColor: "#00ff88"
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: "white" } } },
+                    scales: {
+                        x: { ticks: { color: "white" }, grid: { color: "#333" }},
+                        y: { ticks: { color: "white" }, grid: { color: "#333" }}
                     }
-                });
+                }
             });
-    }
-
-    // Carga inicial
-    cargarGrafico("mensual");
-
-    // Botones de filtro
-    document.querySelectorAll(".filtro").forEach(btn => {
-        btn.addEventListener("click", () => {
-            document.querySelectorAll(".filtro").forEach(b => b.classList.remove("active"));
-            btn.classList.add("active");
-            cargarGrafico(btn.dataset.filtro);
         });
-    });
+}
 
+// -------------------------------------------------------
+// 🔥 Cargar gráfico por MES
+// -------------------------------------------------------
+function cargarGraficoMes(mes) {
+    fetch(`/api/grafico/ventas/?mes=${mes}`)
+        .then(r => r.json())
+        .then(data => {
+
+            if (chartVentas) chartVentas.destroy();
+
+            chartVentas = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: "Ventas ($)",
+                        data: data.valores,
+                        borderColor: "#00ff88",
+                        backgroundColor: "rgba(0,255,136,0.15)",
+                        tension: 0.3,
+                        pointRadius: 4
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        });
+}
+
+// -------------------------------------------------------
+// 🔥 Botones: Diario / Mensual / Anual
+// -------------------------------------------------------
+document.querySelectorAll(".filtro").forEach(btn => {
+    btn.addEventListener("click", () => {
+
+        document.querySelectorAll(".filtro").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+
+        const filtro = btn.dataset.filtro;
+
+        btnPDF.href = `/reportes/ventas/pdf/?filtro=${filtro}`;
+
+        cargarGraficoFiltro(filtro);
+    });
 });
+
+// -------------------------------------------------------
+// 🔥 Selector de mes
+// -------------------------------------------------------
+selectorMes.addEventListener("change", function () {
+    const mes = this.value;
+    btnPDF.href = `/reportes/ventas/pdf/?mes=${mes}`;
+    cargarGraficoMes(mes);
+});
+
+// -------------------------------------------------------
+// 🔥 Carga inicial
+// -------------------------------------------------------
+document.addEventListener("DOMContentLoaded", () => {
+    btnPDF.href = `/reportes/ventas/pdf/?mes=${mesActual}`;
+    cargarGraficoMes(mesActual);
+});
+
 </script>
 
 {% endblock %}

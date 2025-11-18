@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+
+body {
+    font-family: Arial, sans-serif;
+    font-size: 13px;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.logo {
+    width: 120px;
+    margin: 0 auto 10px auto;
+}
+
+hr {
+    border: none;
+    border-top: 1px solid #555;
+    margin: 10px 0;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+.table th {
+    background: #000;
+    color: white;
+    padding: 8px;
+    text-align: left;
+    font-size: 13px;
+}
+
+.table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #ccc;
+}
+
+.footer {
+    text-align: center;
+    margin-top: 30px;
+    font-size: 11px;
+    color: #666;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="header">
+    <!-- LOGO -->
+    <img src="{{ logo_url }}" class="logo">
+
+    <h2>Reporte de Ventas</h2>
+    <hr>
+
+    <p>Generado el {{ fecha_generado }} por {{ usuario.username }}</p>
+    <hr>
+</div>
+
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Periodo</th>
+            <th>Total vendido</th>
+        </tr>
+    </thead>
+
+    <tbody>
+        {% for fila in filas %}
+        <tr>
+            <td>{{ fila.periodo_str }}</td>
+            <td>$ {{ fila.total|floatformat:2 }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+
+</table>
+
+<div class="footer">
+    Tinta Negra · Reporte generado automáticamente · tintanegrasalta@gmail.com
+</div>
+
+</body>
+</html>
