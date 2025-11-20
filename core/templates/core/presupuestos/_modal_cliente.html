@@ -1,25 +1,79 @@
 <div class="modal fade" id="modalCliente" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content" style="background-color:#1f1f1f; border:1px solid #333;">
+      
       <div class="modal-header">
         <h5 class="modal-title text-white">Registrar Cliente</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
+
       <div class="modal-body">
-        <div id="formClienteModal">
-          <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
-          <input type="text" name="nombre" class="form-control mb-2" placeholder="Nombre">
+
+        <form id="formClienteModal">
+          {% csrf_token %}
+          
+          <input type="text" name="nombre" class="form-control mb-2" placeholder="Nombre" required>
           <input type="text" name="apellido" class="form-control mb-2" placeholder="Apellido">
           <input type="text" name="dni" class="form-control mb-2" placeholder="DNI">
           <input type="email" name="email" class="form-control mb-2" placeholder="E-mail">
           <input type="text" name="telefono" class="form-control mb-2" placeholder="Teléfono">
           <input type="text" name="direccion" class="form-control mb-2" placeholder="Dirección">
-        </div>
+        </form>
+
       </div>
+
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
         <button type="button" id="btnGuardarCliente" class="btn btn-success">Guardar</button>
       </div>
+
     </div>
   </div>
 </div>
+
+<script>
+document.getElementById("btnGuardarCliente").addEventListener("click", () => {
+
+    const form = document.getElementById("formClienteModal");
+    const data = new FormData(form);
+
+    fetch("/clientes/create/ajax/", {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": data.get("csrfmiddlewaretoken")
+        },
+        body: data
+    })
+    .then(r => r.json())
+    .then(data => {
+
+        if (!data.success) {
+            alert(data.message);
+            return;
+        }
+
+        const select = document.getElementById("id_id_cliente");
+
+        const option = new Option(
+            data.nombre_completo,
+            data.id,
+            true,
+            true
+        );
+
+        select.add(option);
+
+        const modal = bootstrap.Modal.getInstance(
+            document.getElementById("modalCliente")
+        );
+        modal.hide();
+
+        form.reset();
+    })
+    .catch(err => {
+        console.error("Error AJAX:", err);
+        alert("Error al registrar el cliente.");
+    });
+
+});
+</script>

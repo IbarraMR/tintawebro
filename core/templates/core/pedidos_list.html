@@ -8,24 +8,36 @@
 {% include "core/partials/toasts.html" %}
 
 <h2 class="mb-4 text-white">Pedidos</h2>
+
 <form method="GET" class="d-flex mb-3" role="search">
     <input type="text" name="q" class="form-control me-2"
            placeholder="Buscar por ID de pedido, nombre o apellido..."
            value="{{ q }}">
     <button class="btn btn-primary" type="submit">Buscar</button>
+    
     {% if q %}
-    <a href="{% url 'presupuestos_list' %}" class="btn btn-secondary ms-2">Limpiar</a>
+        <a href="{% url 'pedidos_list' %}" class="btn btn-secondary ms-2">Limpiar</a>
     {% endif %}
 </form>
+
+<!-- 🔥 FILTRO NUEVO: SOLO EN PRODUCCIÓN -->
+<div class="d-flex gap-2 mb-3">
+    <a href="{% url 'pedidos_list' %}" class="btn btn-outline-light btn-sm">
+        Todos
+    </a>
+
+    <a href="?produccion=1" class="btn btn-outline-warning btn-sm">
+        En producción
+    </a>
+</div>
 
 <div class="card p-4" style="background-color: #1f1f1f; border: 1px solid #333333;">
 
     <div class="d-flex justify-content-end mb-4">
-        <a href="#" class="btn btn-custom" id="btn-nuevo-pedido">
+        <a href="{% url 'presupuesto_create' %}" class="btn btn-custom">
             <i class="fas fa-plus me-1"></i> Nuevo Pedido
         </a>
     </div>
-
 
     <div class="table-responsive">
         <table class="table table-dark table-hover align-middle mb-0">
@@ -42,7 +54,6 @@
             <tbody>
                 {% for pedido in pedidos %}
                 <tr class="text-center">
-
                     <td>{{ pedido.id_pedido }}</td>
 
                     <td>{{ pedido.id_cliente.nombre }} {{ pedido.id_cliente.apellido }}</td>
@@ -60,17 +71,24 @@
                     </td>
 
                     <td>
-                        {% if pedido.id_estado.nombre_estado != "ENTREGADO" and pedido.id_estado.nombre_estado != "CANCELADO" %}
+                        {% if pedido.id_estado.nombre_estado == "EN PRODUCCIÓN" %}
                             <button class="btn btn-success btn-sm btn-estado"
                                     data-id="{{ pedido.id_pedido }}"
                                     data-estado="ENTREGADO">
-                                ✅ Entregado
+                                Entregado
                             </button>
 
                             <button class="btn btn-danger btn-sm btn-estado ms-1"
                                     data-id="{{ pedido.id_pedido }}"
                                     data-estado="CANCELADO">
-                                ❌ Cancelar
+                                Cancelar
+                            </button>
+
+                        {% else %}
+                            <button class="btn btn-warning btn-sm btn-estado"
+                                    data-id="{{ pedido.id_pedido }}"
+                                    data-estado="EN PRODUCCIÓN">
+                                Editar
                             </button>
                         {% endif %}
                     </td>
@@ -86,39 +104,36 @@
             </tbody>
         </table>
 
-        
-<nav aria-label="Paginación de pedidos" class="mt-3">
-    <ul class="pagination justify-content-center">
+        <nav aria-label="Paginación de pedidos" class="mt-3">
+            <ul class="pagination justify-content-center">
 
-        {% if pedidos.has_previous %}
-        <li class="page-item">
-            <a class="page-link" href="?q={{ q }}&page={{ pedidos.previous_page_number }}">
-                &laquo; Anterior
-            </a>
-        </li>
-        {% endif %}
+                {% if pedidos.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?q={{ q }}&page={{ pedidos.previous_page_number }}">
+                        « Anterior
+                    </a>
+                </li>
+                {% endif %}
 
-        {% for num in pedidos.paginator.page_range %}
-        <li class="page-item {% if pedidos.number == num %} active {% endif %}">
-            <a class="page-link" href="?q={{ q }}&page={{ num }}">{{ num }}</a>
-        </li>
-        {% endfor %}
+                {% for num in pedidos.paginator.page_range %}
+                <li class="page-item {% if pedidos.number == num %} active {% endif %}">
+                    <a class="page-link" href="?q={{ q }}&page={{ num }}">{{ num }}</a>
+                </li>
+                {% endfor %}
 
-        {% if pedidos.has_next %}
-        <li class="page-item">
-            <a class="page-link" href="?q={{ q }}&page={{ pedidos.next_page_number }}">
-                Siguiente &raquo;
-            </a>
-        </li>
-        {% endif %}
+                {% if pedidos.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?q={{ q }}&page={{ pedidos.next_page_number }}">
+                        Siguiente »
+                    </a>
+                </li>
+                {% endif %}
 
-    </ul>
-</nav>
+            </ul>
+        </nav>
 
     </div>
 </div>
-
-
 
 <script>
 document.addEventListener("DOMContentLoaded", () => {
@@ -149,8 +164,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     badge.className = "badge badge-estado";
                     if (estado === "ENTREGADO") badge.classList.add("bg-success");
                     if (estado === "CANCELADO") badge.classList.add("bg-danger");
+                    if (estado === "EN PRODUCCIÓN") badge.classList.add("bg-warning", "text-dark");
 
-                    fila.querySelectorAll(".btn-estado").forEach(b => b.style.display = "none");
+                    setTimeout(() => location.reload(), 300);
                 }
             });
         });

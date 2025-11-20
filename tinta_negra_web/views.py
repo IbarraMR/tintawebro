@@ -501,7 +501,6 @@ def compras_list(request):
 def compra_detalle(request, pk):
     compra = get_object_or_404(Compras, pk=pk)
     detalles = DetallesCompra.objects.filter(compra=compra)
-    
     context = {
         'compra': compra,
         'detalles': detalles,
@@ -1016,7 +1015,9 @@ from django.db.models import Q
 @login_required
 @permission_required('core.view_pedidos', raise_exception=True)
 def pedidos_list(request):
+
     pedidos_qs = Pedidos.objects.select_related("id_cliente", "id_estado").order_by('-id_pedido')
+
     q = request.GET.get("q", "").strip()
     if q:
         pedidos_qs = pedidos_qs.filter(
@@ -1025,38 +1026,73 @@ def pedidos_list(request):
             Q(id_cliente__apellido__icontains=q)
         )
 
+    if request.GET.get("produccion") == "1":
+        pedidos_qs = pedidos_qs.filter(id_estado__nombre_estado__iexact="EN PRODUCCIÓN")
+
     paginator = Paginator(pedidos_qs, 15)
     page_number = request.GET.get("page")
     pedidos = paginator.get_page(page_number)
 
     return render(request, 'core/pedidos_list.html', {
         'pedidos': pedidos,
-        'page_obj': pedidos,  
+        'page_obj': pedidos,
         'q': q,
     })
+
 
 
 @never_cache
 @login_required
 @permission_required('core.view_presupuestos', raise_exception=True)
 def presupuestos_list(request):
+    from decimal import Decimal
+    from core.models import Productos
+
     q = request.GET.get("q", "").strip()
     presupuestos_qs = Presupuestos.objects.select_related("id_cliente").order_by("-id_presupuesto")
+
     if q:
         presupuestos_qs = presupuestos_qs.filter(
             Q(id_presupuesto__icontains=q) |
             Q(id_cliente__nombre__icontains=q) |
             Q(id_cliente__apellido__icontains=q)
         )
-    paginator = Paginator(presupuestos_qs, 15)  
+
+    paginator = Paginator(presupuestos_qs, 15)
     page_number = request.GET.get("page")
     presupuestos = paginator.get_page(page_number)
+
+    for pre in presupuestos:
+
+        costo_trabajos = sum([
+            float(t.subtotal_insumos or 0)
+            for t in pre.trabajos.all()
+        ])
+
+        costo_productos = 0
+
+        for t in pre.trabajos.all():
+            try:
+                producto = Productos.objects.get(nombre=t.nombre_trabajo)
+
+                if producto.tipo.nombre_tipo.lower() == "tercerizado":
+                    costo_productos += float(producto.costo_inicial or 0) * int(t.cantidad)
+
+            except Productos.DoesNotExist:
+                pass
+        costo_total_real = costo_trabajos + costo_productos
+        pre.ganancia_real = round(
+            float(pre.total_presupuesto or 0) - costo_total_real,
+            2
+        )
 
     return render(request, "core/presupuestos/presupuestos_list.html", {
         "presupuestos": presupuestos,
         "page_obj": presupuestos,
         "q": q,
     })
+
+
 
 @login_required
 def presupuesto_create(request):
@@ -1139,15 +1175,15 @@ def configuracion(request):
     })
 
 
-
-
-
-
 @login_required
 @transaction.atomic
 def convertir_presupuesto_a_pedido(request, pk):
-    presupuesto = get_object_or_404(Presupuestos, id_presupuesto=pk)
+    from core.models import (
+        Productos, PedidosProductos,
+        StockMovimientos, TrabajoInsumo, Trabajo
+    )
 
+    presupuesto = get_object_or_404(Presupuestos, id_presupuesto=pk)
     if not presupuesto.id_cliente:
         messages.error(request, "❌ No podés generar un pedido sin seleccionar un cliente.")
         return redirect("presupuesto_detalle", pk)
@@ -1162,12 +1198,38 @@ def convertir_presupuesto_a_pedido(request, pk):
     pedido.stock_descontado = False
     pedido.save()
 
-    from core.models import StockMovimientos, TrabajoInsumo, Trabajo
-
     trabajos = Trabajo.objects.filter(presupuesto=presupuesto)
 
     for trabajo in trabajos:
 
+        producto_catalogo = None
+        try:
+            producto_catalogo = Productos.objects.get(nombre=trabajo.nombre_trabajo)
+        except Productos.DoesNotExist:
+            producto_catalogo = None
+
+        if producto_catalogo:
+
+            PedidosProductos.objects.create(
+                pedido=pedido,
+                producto=producto_catalogo,
+                cantidad=trabajo.cantidad,
+                precio_unitario=producto_catalogo.precio,
+                subtotal=producto_catalogo.precio * trabajo.cantidad
+            )
+
+            if producto_catalogo.tipo.nombre_tipo.lower() == "tercerizado":
+                stock_antes = float(producto_catalogo.stock_actual or 0)
+                stock_nuevo = stock_antes - float(trabajo.cantidad)
+                producto_catalogo.stock_actual = stock_nuevo
+                producto_catalogo.save()
+
+                StockMovimientos.objects.create(
+                    producto=producto_catalogo,
+                    tipo="salida",
+                    cantidad=trabajo.cantidad,
+                    detalle=f"Uso de producto en Pedido #{pedido.id_pedido}"
+                )
         insumos_trabajo = TrabajoInsumo.objects.filter(trabajo=trabajo)
 
         for det in insumos_trabajo:
@@ -1205,6 +1267,7 @@ def convertir_presupuesto_a_pedido(request, pk):
     )
 
     return redirect("pedidos_list")
+
 
 
 
@@ -1290,11 +1353,30 @@ from core.models import Presupuestos, Trabajo, TrabajoInsumo, ConfiguracionEmpre
 
 @login_required
 def presupuesto_detalle(request, pk):
+    from core.models import Productos
+
     presupuesto = get_object_or_404(Presupuestos, id_presupuesto=pk)
     trabajos = Trabajo.objects.filter(presupuesto=presupuesto).prefetch_related("insumos__insumo")
     config = ConfiguracionEmpresa.objects.first()
     subtotal_general = sum(t.total_trabajo for t in trabajos)
-    total_general = subtotal_general + (presupuesto.costo_diseno or 0)
+    total_general = subtotal_general
+    costo_real_insumos = 0
+    costo_real_tercerizados = 0
+
+    for t in trabajos:
+
+        costo_real_insumos += float(t.subtotal_insumos or 0)
+        try:
+            producto = Productos.objects.get(nombre=t.nombre_trabajo)
+
+            if producto.tipo.nombre_tipo.lower() == "tercerizado":
+                costo_real_tercerizados += float(producto.costo_inicial or 0) * int(t.cantidad)
+
+        except Productos.DoesNotExist:
+            pass
+
+    costo_real_total = costo_real_insumos + costo_real_tercerizados
+    ganancia_real = float(total_general) - costo_real_total
 
     return render(request, "core/presupuestos/presupuesto_detalle.html", {
         "presupuesto": presupuesto,
@@ -1302,7 +1384,12 @@ def presupuesto_detalle(request, pk):
         "config": config,
         "subtotal_general": subtotal_general,
         "total_general": total_general,
+        "costo_real": costo_real_total,
+        "ganancia_real": ganancia_real,
+        "costo_real_insumos": costo_real_insumos,
+        "costo_real_tercerizados": costo_real_tercerizados,
     })
+
 
 
 def eliminar_insumo_presupuesto(request, detalle_id):
@@ -1965,7 +2052,6 @@ def duplicar_trabajo(request, trabajo_id):
     presupuesto.total_presupuesto = total_presupuesto
     presupuesto.save()
 
-    # 4) Devolver tabla actualizada
     tabla_html = render_to_string(
         "core/presupuestos/_tabla_trabajos.html",
         {"presupuesto": presupuesto},
@@ -2006,197 +2092,6 @@ def presupuesto_aprobar(request, id):
     presupuesto.save()
 
     return redirect("presupuesto_detalle", presupuesto.id_presupuesto)
-
-
-@login_required
-@transaction.atomic
-def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
-    if request.method != "POST":
-        return JsonResponse({"error": "Método no permitido"}, status=405)
-
-    pedido = get_object_or_404(Pedidos, id_pedido=id_pedido)
-
-    try:
-        estado = EstadosPedidos.objects.get(nombre_estado=nuevo_estado)
-    except EstadosPedidos.DoesNotExist:
-        return JsonResponse({"error": "Estado inválido"}, status=400)
-
-    estado_anterior = pedido.id_estado.nombre_estado if pedido.id_estado else None
-
-    from django.utils import timezone
-    from core.models import (
-        TrabajoInsumo,
-        StockMovimientos,
-        Trabajo,
-        Productos,
-        ProductoInsumo,
-        PedidosProductos
-    )
-
-
-    if nuevo_estado == "ENTREGADO":
-
-        pedido.fecha_entrega_real = timezone.now().date()
-        pedido.fecha_pedido = pedido.fecha_entrega_real 
-        pedido.id_estado = estado
-        pedido.save()
-
-        return JsonResponse({
-            "success": True,
-            "nuevo_estado": estado.nombre_estado,
-            "fecha_entrega_real": pedido.fecha_entrega_real.strftime("%d/%m/%Y")
-        })
-
-    if nuevo_estado == "EN PRODUCCIÓN":
-
-        if not pedido.stock_descontado:
-
-            detalles = pedido.detalles.all()
-            for det in detalles:
-
-                insumo = det.insumo
-                factor = float(insumo.factor_conversion or 1)
-                cantidad_real = float(det.cantidad) / factor
-
-                insumo.stock_actual -= cantidad_real
-                if insumo.stock_actual < 0:
-                    insumo.stock_actual = 0
-                insumo.save()
-
-                StockMovimientos.objects.create(
-                    insumo=insumo,
-                    tipo="salida",
-                    cantidad=cantidad_real,
-                    detalle=f"Uso en Pedido #{pedido.id_pedido}"
-                )
-
-            productos_pedido = PedidosProductos.objects.filter(pedido=pedido)
-
-            for item in productos_pedido:
-
-                producto = item.producto
-
-                if producto.tipo and producto.tipo.nombre_tipo.upper() == "TERCERIZADO":
-
-                    producto.stock_actual -= item.cantidad
-                    if producto.stock_actual < 0:
-                        producto.stock_actual = 0
-                    producto.save()
-
-            for item in productos_pedido:
-
-                producto = item.producto
-
-                if producto.tipo and producto.tipo.nombre_tipo.upper() == "PERSONALIZADO":
-
-                    insumos_producto = ProductoInsumo.objects.filter(producto=producto)
-
-                    for pi in insumos_producto:
-
-                        insumo = pi.insumo
-                        factor = float(insumo.factor_conversion or 1)
-                        cantidad_real = (float(pi.cantidad) * item.cantidad) / factor
-                        insumo.stock_actual -= cantidad_real
-                        if insumo.stock_actual < 0:
-                            insumo.stock_actual = 0
-                        insumo.save()
-
-                        StockMovimientos.objects.create(
-                            insumo=insumo,
-                            tipo="salida",
-                            cantidad=cantidad_real,
-                            detalle=f"Consumo en Producto Personalizado (Pedido #{pedido.id_pedido})"
-                        )
-
-            pedido.stock_descontado = True
-
-        pedido.id_estado = estado
-        pedido.save()
-
-        return JsonResponse({
-            "success": True,
-            "nuevo_estado": estado.nombre_estado,
-            "nota": "Stock descontado correctamente."
-        })
-
-
-    if nuevo_estado == "CANCELADO":
-
-        if pedido.stock_descontado:
-
-            detalles = pedido.detalles.all()
-            for det in detalles:
-
-                insumo = det.insumo
-                factor = float(insumo.factor_conversion or 1)
-                cantidad_real = float(det.cantidad) / factor
-
-                insumo.stock_actual += cantidad_real
-                insumo.save()
-
-                StockMovimientos.objects.create(
-                    insumo=insumo,
-                    tipo="entrada",
-                    cantidad=cantidad_real,
-                    detalle=f"Devolución por cancelación de Pedido #{pedido.id_pedido}"
-                )
-
-
-            productos_pedido = PedidosProductos.objects.filter(pedido=pedido)
-
-            for item in productos_pedido:
-
-                producto = item.producto
-
-                if producto.tipo and producto.tipo.nombre_tipo.upper() == "TERCERIZADO":
-
-                    producto.stock_actual += item.cantidad
-                    producto.save()
-
-            for item in productos_pedido:
-
-                producto = item.producto
-
-                if producto.tipo and producto.tipo.nombre_tipo.upper() == "PERSONALIZADO":
-
-                    insumos_producto = ProductoInsumo.objects.filter(producto=producto)
-
-                    for pi in insumos_producto:
-
-                        insumo = pi.insumo
-                        factor = float(insumo.factor_conversion or 1)
-                        cantidad_real = (float(pi.cantidad) * item.cantidad) / factor
-
-                        insumo.stock_actual += cantidad_real
-                        insumo.save()
-
-                        StockMovimientos.objects.create(
-                            insumo=insumo,
-                            tipo="entrada",
-                            cantidad=cantidad_real,
-                            detalle=f"Devolución Producto Personalizado (Pedido #{pedido.id_pedido})"
-                        )
-
-            pedido.stock_descontado = False
-
-        pedido.id_estado = estado
-        pedido.save()
-
-        return JsonResponse({
-            "success": True,
-            "nuevo_estado": estado.nombre_estado,
-            "stock_devuelto": True
-        })
-
-    pedido.id_estado = estado
-    pedido.save()
-
-    return JsonResponse({
-        "success": True,
-        "nuevo_estado": estado.nombre_estado
-    })
-
-
 
 
 
@@ -2272,25 +2167,19 @@ def producto_create(request):
 
 
 
-
-
 @never_cache
 @login_required
 @permission_required('core.change_productos', raise_exception=True)
 def producto_edit(request, pk):
     producto = Productos.objects.get(pk=pk)
     insumos = Insumos.objects.all().order_by('nombre')
-    tipo_valor = producto.tipo.nombre_tipo.lower() if producto.tipo else "personalizado"
+    tipo_actual = producto.tipo.nombre_tipo.lower() if producto.tipo else "personalizado"
 
     if request.method == "POST":
+
         producto.nombre = request.POST.get("nombre")
         producto.descripcion = request.POST.get("descripcion")
-
-        costo_diseno = Decimal(request.POST.get("costo_diseno", "0"))
-        margen_ganancia = Decimal(request.POST.get("margen_ganancia", "0"))
-        precio_final = Decimal(request.POST.get("precio", "0"))
-
-        tipo_valor = request.POST.get("tipo")
+        tipo_valor = request.POST.get("tipo")  # "personalizado" o "tercerizado"
         tipo = TiposProducto.objects.filter(nombre_tipo__iexact=tipo_valor).first()
 
         if not tipo:
@@ -2298,12 +2187,13 @@ def producto_edit(request, pk):
             return redirect("producto_edit", pk=pk)
 
         producto.tipo = tipo
-        producto.precio = precio_final
-        producto.costo_diseno = costo_diseno
-        producto.margen_ganancia = margen_ganancia
-        producto.save()
 
         if tipo_valor == "personalizado":
+            producto.costo_diseno = Decimal(request.POST.get("costo_diseno", "0"))
+            producto.margen_ganancia = Decimal(request.POST.get("margen_ganancia", "0"))
+            producto.precio = Decimal(request.POST.get("precio", "0"))
+
+            producto.save()
             insumo_ids = request.POST.getlist("insumo[]")
             cantidades = request.POST.getlist("cantidad[]")
 
@@ -2316,7 +2206,17 @@ def producto_edit(request, pk):
                         insumo=Insumos.objects.get(id_insumo=insumo_id),
                         cantidad=cant
                     )
+
         else:
+            producto.costo_inicial = Decimal(request.POST.get("costo_inicial", "0"))
+            producto.margen_ganancia = Decimal(request.POST.get("margen_ganancia", "0"))
+            producto.precio = Decimal(request.POST.get("precio", "0"))
+            producto.stock_actual = Decimal(request.POST.get("stock_actual", "0"))
+            producto.stock_minimo = Decimal(request.POST.get("stock_minimo", "0"))
+
+            producto.costo_diseno = 0
+            producto.save()
+
             ProductosInsumos.objects.filter(producto=producto).delete()
 
         messages.success(request, f"Producto '{producto.nombre}' actualizado correctamente.")
@@ -2329,7 +2229,7 @@ def producto_edit(request, pk):
         "producto": producto,
         "insumos": insumos,
         "producto_insumos": producto_insumos,
-        "tipo_actual": tipo_valor,
+        "tipo_actual": tipo_actual,
     })
 
 
@@ -2365,13 +2265,11 @@ def producto_delete(request, id_producto):
     return redirect("productos_list")
 
 
-
 @login_required
 @require_POST
 @transaction.atomic
 def agregar_producto_presupuesto(request, presupuesto_id):
     presupuesto = get_object_or_404(Presupuestos, pk=presupuesto_id)
-
     producto_id = request.POST.get("id_producto")
     cantidad = int(request.POST.get("cantidad", 1))
 
@@ -2384,34 +2282,45 @@ def agregar_producto_presupuesto(request, presupuesto_id):
         nombre_trabajo=producto.nombre,
         descripcion=producto.descripcion or "",
         cantidad=cantidad,
-        costo_diseno=0,
-        margen_ganancia=0,
+        costo_diseno=0,          
+        margen_ganancia=0,        
     )
 
-    insumos_producto = ProductosInsumos.objects.filter(producto=producto)
+    tipo_producto = producto.tipo.nombre_tipo.strip().lower()
+
     subtotal_insumos = 0
+    subtotal_costo_real = 0          
+    total_venta = float(producto.precio) * cantidad
 
-    for pi in insumos_producto:
-        cant = float(pi.cantidad)
-        precio_unit_insumo = float(pi.insumo.precio_costo_unitario) / float(pi.insumo.factor_conversion or 1)
-        subtotal = precio_unit_insumo * cant
-        subtotal_insumos += subtotal
+    if tipo_producto == "personalizado":
+        insumos_producto = ProductosInsumos.objects.filter(producto=producto)
 
-        TrabajoInsumo.objects.create(
-            trabajo=trabajo,
-            insumo=pi.insumo,
-            cantidad=cant,
-            precio_unitario=precio_unit_insumo,
-            subtotal=subtotal,
-        )
+        for pi in insumos_producto:
+            cant_insumo = float(pi.cantidad)
+            precio_unit_insumo = float(pi.insumo.precio_costo_unitario) / float(pi.insumo.factor_conversion or 1)
+            subtotal = precio_unit_insumo * cant_insumo
 
-    precio_unitario_real = float(producto.precio)
-    total_trabajo = precio_unitario_real * cantidad
+            subtotal_insumos += subtotal
+            subtotal_costo_real += subtotal 
+
+            TrabajoInsumo.objects.create(
+                trabajo=trabajo,
+                insumo=pi.insumo,
+                cantidad=cant_insumo,
+                precio_unitario=precio_unit_insumo,
+                subtotal=subtotal,
+            )
+
+    else:
+        costo_real = float(producto.costo_inicial or 0)
+        subtotal_costo_real = costo_real * cantidad
+        subtotal_insumos = 0  
 
     trabajo.subtotal_insumos = round(subtotal_insumos, 2)
-    trabajo.precio_unitario = round(precio_unitario_real, 2)
-    trabajo.total_trabajo = round(total_trabajo, 2)
+    trabajo.precio_unitario = round(float(producto.precio), 2)
+    trabajo.total_trabajo = round(total_venta, 2)
     trabajo.save()
+
     tot = presupuesto.trabajos.aggregate(s=Sum("total_trabajo"))["s"] or 0
     presupuesto.subtotal = tot
     presupuesto.total_presupuesto = tot
@@ -2423,6 +2332,7 @@ def agregar_producto_presupuesto(request, presupuesto_id):
     )
 
     return JsonResponse({"ok": True, "tabla": html, "total": tot})
+
 
 
 
@@ -2695,4 +2605,222 @@ def render_pdf(template_src, context_dict={}):
 
     return result.getvalue()
 
+@login_required
+@transaction.atomic
+def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
 
+    if request.method != "POST":
+        return JsonResponse({"error": "Método no permitido"}, status=405)
+
+    pedido = get_object_or_404(Pedidos, id_pedido=id_pedido)
+
+    try:
+        estado = EstadosPedidos.objects.get(nombre_estado=nuevo_estado)
+    except EstadosPedidos.DoesNotExist:
+        return JsonResponse({"error": "Estado inválido"}, status=400)
+
+    from django.utils import timezone
+    from core.models import (
+        StockMovimientos,
+        PedidosInsumos,
+        PedidosProductos,
+        ProductosInsumos
+    )
+
+    if nuevo_estado == "ENTREGADO":
+
+        if not pedido.stock_descontado:
+            detalles = pedido.detalles.all()
+            productos_pedido = PedidosProductos.objects.filter(id_pedido=pedido)
+
+            for det in detalles:
+                insumo = det.insumo
+                factor = Decimal(insumo.factor_conversion or 1)
+                cantidad_real = Decimal(det.cantidad) / factor
+                insumo.stock_actual -= cantidad_real
+                if insumo.stock_actual < 0:
+                    insumo.stock_actual = Decimal("0")
+                insumo.save()
+
+                StockMovimientos.objects.create(
+                    insumo=insumo,
+                    tipo="salida",
+                    cantidad=cantidad_real,
+                    detalle=f"Uso en Pedido #{pedido.id_pedido}"
+                )
+
+            for item in productos_pedido:
+                producto = item.id_producto
+                if producto.tipo and producto.tipo.nombre_tipo.upper() == "TERCERIZADO":
+                    producto.stock_actual -= Decimal(item.cantidad)
+                    if producto.stock_actual < 0:
+                        producto.stock_actual = Decimal("0")
+                    producto.save()
+
+            for item in productos_pedido:
+                producto = item.id_producto
+                if producto.tipo and producto.tipo.nombre_tipo.upper() == "PERSONALIZADO":
+
+                    receta = ProductosInsumos.objects.filter(producto=producto)
+
+                    for pi in receta:
+                        insumo = pi.insumo
+                        factor = Decimal(insumo.factor_conversion or 1)
+                        cantidad_real = (Decimal(pi.cantidad) * Decimal(item.cantidad)) / factor
+
+                        insumo.stock_actual -= cantidad_real
+                        if insumo.stock_actual < 0:
+                            insumo.stock_actual = Decimal("0")
+                        insumo.save()
+
+                        StockMovimientos.objects.create(
+                            insumo=insumo,
+                            tipo="salida",
+                            cantidad=cantidad_real,
+                            detalle=f"Consumo Receta Producto Personalizado (Pedido #{pedido.id_pedido})"
+                        )
+
+            pedido.stock_descontado = True
+
+        pedido.id_estado = estado
+        pedido.fecha_entrega_real = timezone.now().date()
+        pedido.save()
+
+        return JsonResponse({
+            "success": True,
+            "nuevo_estado": estado.nombre_estado,
+            "fecha_entrega_real": pedido.fecha_entrega_real.strftime("%d/%m/%Y")
+        })
+
+    if nuevo_estado == "EN PRODUCCIÓN":
+
+        if pedido.stock_descontado is False and pedido.id_estado.nombre_estado == "CANCELADO":
+
+            detalles = pedido.detalles.all()
+            productos_pedido = PedidosProductos.objects.filter(id_pedido=pedido)
+
+            for det in detalles:
+                insumo = det.insumo
+                factor = Decimal(insumo.factor_conversion or 1)
+                cantidad_real = Decimal(det.cantidad) / factor
+
+                insumo.stock_actual += cantidad_real
+                insumo.save()
+
+                StockMovimientos.objects.create(
+                    insumo=insumo,
+                    tipo="entrada",
+                    cantidad=cantidad_real,
+                    detalle=f"Reversión de Cancelación (Pedido #{pedido.id_pedido})"
+                )
+
+            for item in productos_pedido:
+                producto = item.id_producto
+                if producto.tipo and producto.tipo.nombre_tipo.upper() == "TERCERIZADO":
+                    producto.stock_actual += Decimal(item.cantidad)
+                    producto.save()
+
+            for item in productos_pedido:
+                producto = item.id_producto
+                if producto.tipo and producto.tipo.nombre_tipo.upper() == "PERSONALIZADO":
+                    receta = ProductosInsumos.objects.filter(producto=producto)
+
+                    for pi in receta:
+                        insumo = pi.insumo
+                        factor = Decimal(insumo.factor_conversion or 1)
+                        cantidad_real = (Decimal(pi.cantidad) * Decimal(item.cantidad)) / factor
+
+                        insumo.stock_actual += cantidad_real
+                        insumo.save()
+
+                        StockMovimientos.objects.create(
+                            insumo=insumo,
+                            tipo="entrada",
+                            cantidad=cantidad_real,
+                            detalle=f"Reversión Receta Personalizado (Pedido #{pedido.id_pedido})"
+                        )
+
+        pedido.id_estado = estado
+        pedido.save()
+
+        return JsonResponse({
+            "success": True,
+            "nuevo_estado": estado.nombre_estado
+        })
+
+    if nuevo_estado == "CANCELADO":
+
+        if pedido.stock_descontado:
+
+            detalles = pedido.detalles.all()
+            productos_pedido = PedidosProductos.objects.filter(id_pedido=pedido)
+            for det in detalles:
+                insumo = det.insumo
+                factor = Decimal(insumo.factor_conversion or 1)
+                cantidad_real = Decimal(det.cantidad) / factor
+
+                insumo.stock_actual += cantidad_real
+                insumo.save()
+
+                StockMovimientos.objects.create(
+                    insumo=insumo,
+                    tipo="entrada",
+                    cantidad=cantidad_real,
+                    detalle=f"Devolución por Cancelación Pedido #{pedido.id_pedido}"
+                )
+
+            for item in productos_pedido:
+                producto = item.id_producto
+                if producto.tipo and producto.tipo.nombre_tipo.upper() == "TERCERIZADO":
+                    producto.stock_actual += Decimal(item.cantidad)
+                    producto.save()
+
+            for item in productos_pedido:
+                producto = item.id_producto
+                if producto.tipo and producto.tipo.nombre_tipo.upper() == "PERSONALIZADO":
+                    receta = ProductosInsumos.objects.filter(producto=producto)
+
+                    for pi in receta:
+                        insumo = pi.insumo
+                        factor = Decimal(insumo.factor_conversion or 1)
+                        cantidad_real = (Decimal(pi.cantidad) * Decimal(item.cantidad)) / factor
+
+                        insumo.stock_actual += cantidad_real
+                        insumo.save()
+
+                        StockMovimientos.objects.create(
+                            insumo=insumo,
+                            tipo="entrada",
+                            cantidad=cantidad_real,
+                            detalle=f"Devolución Receta Personalizado (Pedido #{pedido.id_pedido})"
+                        )
+
+            pedido.stock_descontado = False
+
+        pedido.id_estado = estado
+        pedido.save()
+
+        return JsonResponse({
+            "success": True,
+            "nuevo_estado": estado.nombre_estado,
+            "stock_devuelto": True
+        })
+
+    pedido.id_estado = estado
+    pedido.save()
+
+    return JsonResponse({
+        "success": True,
+        "nuevo_estado": estado.nombre_estado
+    })
+
+
+@login_required
+def cliente_pedidos(request, pk):
+    cliente = get_object_or_404(Cliente, id_cliente=pk)
+    pedidos = Pedidos.objects.filter(id_cliente=cliente).order_by('-id_pedido')
+
+    return render(request, "core/clientes/cliente_pedidos.html", {
+        "cliente": cliente,
+        "pedidos": pedidos,
+    })

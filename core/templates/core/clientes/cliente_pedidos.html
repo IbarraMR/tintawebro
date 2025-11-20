@@ -1,0 +1,54 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Pedidos de {{ cliente.nombre }}{% endblock %}
+
+{% block content %}
+
+<h2 class="text-white mb-4">
+  Pedidos del cliente: {{ cliente.nombre }} {{ cliente.apellido }}
+</h2>
+
+<a href="{% url 'clientes_list' %}" class="btn btn-secondary mb-3">
+  ⬅ Volver al listado de clientes
+</a>
+
+<div class="card p-4" style="background:#1f1f1f; border:1px solid #333">
+    <table class="table table-dark table-hover">
+        <thead>
+            <tr class="text-center">
+                <th>ID</th>
+                <th>Total</th>
+                <th>Estado</th>
+                <th>Fecha</th>
+            </tr>
+        </thead>
+
+        <tbody>
+        {% for p in pedidos %}
+            <tr class="text-center">
+                <td>{{ p.id_pedido }}</td>
+                <td>$ {{ p.total_pedido }}</td>
+                <td>
+                    <span class="badge
+                        {% if p.id_estado.nombre_estado == 'EN PRODUCCIÓN' %} bg-warning text-dark
+                        {% elif p.id_estado.nombre_estado == 'ENTREGADO' %} bg-success
+                        {% elif p.id_estado.nombre_estado == 'CANCELADO' %} bg-danger
+                        {% endif %}">
+                        {{ p.id_estado.nombre_estado }}
+                    </span>
+                </td>
+                <td>{{ p.fecha_pedido|date:"d/m/Y" }}</td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="4" class="text-center text-secondary">
+                    Este cliente todavía no tiene pedidos registrados.
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}

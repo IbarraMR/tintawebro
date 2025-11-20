@@ -25,6 +25,7 @@
         </div>
       </div>
 
+      <!-- Guardar cliente seleccionado en el presupuesto (AJAX) -->
       <script>
       document.addEventListener("DOMContentLoaded", () => {
 
@@ -66,31 +67,14 @@
         {{ form.fecha_emision }}
       </div>
 
-      <div class="col-md-4">
-        <label class="form-label text-white">Fecha vencimiento</label>
-        {{ form.fecha_vencimiento }}
-      </div>
-
+      <!-- Solo controlamos la fecha de emisión (sin vencimiento) -->
       <script>
       document.addEventListener("DOMContentLoaded", () => {
           const hoy = new Date().toISOString().split("T")[0];
           const fEmision = document.getElementById("id_fecha_emision");
-          const fVenc = document.getElementById("id_fecha_vencimiento");
 
           if (fEmision) {
               fEmision.setAttribute("min", hoy);
-              fEmision.addEventListener("change", () => {
-                  fVenc.value = "";
-                  fVenc.setAttribute("min", fEmision.value);
-              });
-          }
-          if (fVenc) {
-              fVenc.addEventListener("change", () => {
-                  if (fEmision.value && fVenc.value < fEmision.value) {
-                      alert("La fecha de vencimiento debe ser posterior a la fecha de emisión.");
-                      fVenc.value = "";
-                  }
-              });
           }
       });
       </script>
@@ -225,7 +209,6 @@
 
     <hr class="text-secondary mt-4">
 
-
     <h4 class="text-white mt-3">Trabajos agregados</h4>
 
     <div id="contenedor-tabla-trabajos">
@@ -254,7 +237,6 @@
 
   </form>
 </div>
-
 
 <script type="text/template" id="template-insumo">
 <tr class="insumo-row">
@@ -293,10 +275,9 @@
 </tr>
 </script>
 
-
+<!-- Tabs + tabla productos -->
 <script>
 document.addEventListener("DOMContentLoaded", () => {
-
 
   const tabTrabajo = document.getElementById("tab-trabajo");
   const tabProducto = document.getElementById("tab-producto");
@@ -321,7 +302,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   tabTrabajo.addEventListener("click", activarTrabajo);
   tabProducto.addEventListener("click", activarProducto);
-
 
   const filas = Array.from(document.querySelectorAll(".producto-item"));
   const tablaBody = document.getElementById("productosBody");
@@ -372,12 +352,11 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 </script>
 
-
+<!-- AJAX trabajos + productos -->
 <script>
 document.addEventListener("DOMContentLoaded", function () {
 
   const presupuestoId = document.getElementById("presupuesto_id")?.value;
-
 
   function actualizarTablaTrabajo(data) {
     const cont = document.getElementById("contenedor-tabla-trabajos");
@@ -395,7 +374,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     initAccionesTablaTrabajos();
   }
-
 
   function initAgregarProducto() {
     document.querySelectorAll(".btn-add-producto").forEach(btn => {
@@ -426,8 +404,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-
-function initAgregarTrabajo() {
+  function initAgregarTrabajo() {
     const btn = document.getElementById("btnAddTrabajo");
 
     btn.addEventListener("click", function (e) {
@@ -493,11 +470,9 @@ function initAgregarTrabajo() {
             document.getElementById("total-trabajo").textContent = "0.00";
         });
     });
-}
-
+  }
 
   function initAccionesTablaTrabajos() {
-
     document.querySelectorAll(".btn-eliminar-trabajo").forEach(btn => {
       btn.addEventListener("click", function () {
         if (!confirm("¿Eliminar este trabajo?")) return;
@@ -514,7 +489,6 @@ function initAgregarTrabajo() {
       });
     });
 
-    // Duplicar
     document.querySelectorAll(".btn-duplicar").forEach(btn => {
       btn.addEventListener("click", function () {
         fetch("{% url 'duplicar_trabajo' 0 %}".replace("0", this.dataset.id), {
@@ -537,6 +511,7 @@ function initAgregarTrabajo() {
 });
 </script>
 
+<!-- Cálculos de insumos del trabajo -->
 <script>
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -599,6 +574,64 @@ document.addEventListener("DOMContentLoaded", () => {
     recalcularTodos();
   });
 
+});
+</script>
+
+<!-- AJAX modal cliente -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+    const btnGuardar = document.getElementById("btnGuardarCliente");
+    const errorBox = document.getElementById("clienteError");
+
+    if (!btnGuardar) return;
+
+    btnGuardar.addEventListener("click", () => {
+
+        const modalForm = document.getElementById("formClienteModal");
+        const csrf = document.querySelector("#formClienteModal [name=csrfmiddlewaretoken]").value;
+
+        const datos = new FormData();
+        modalForm.querySelectorAll("input").forEach(i => {
+            if (i.name) datos.append(i.name, i.value);
+        });
+
+        fetch("/clientes/create/ajax/", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": csrf,
+                "X-Requested-With": "XMLHttpRequest"
+            },
+            body: datos
+        })
+        .then(r => r.json())
+        .then(data => {
+
+            if (!data.success) {
+                errorBox.textContent = data.message;
+                errorBox.classList.remove("d-none");
+                return;
+            }
+
+            errorBox.classList.add("d-none");
+
+            const select = document.getElementById("id_id_cliente");
+
+            const opt = document.createElement("option");
+            opt.value = data.id;
+            opt.textContent = data.nombre_completo;
+            opt.selected = true;
+
+            select.appendChild(opt);
+
+            modalForm.querySelectorAll("input").forEach(i => {
+                if (i.type !== "hidden") i.value = "";
+            });
+
+            const modal = bootstrap.Modal.getInstance(document.getElementById("modalCliente"));
+            modal.hide();
+        });
+    });
 });
 </script>
 

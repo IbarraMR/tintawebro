@@ -48,6 +48,18 @@
         <strong>Margen de Ganancia:</strong><br>
         {{ producto.margen_ganancia|default:"0" }}%
       </div>
+
+      <!-- 🔥 STOCK AGREGADO AQUÍ -->
+      <div class="col-md-3 mb-3">
+        <strong>Stock Actual:</strong><br>
+        {{ producto.stock_actual|default:"0" }}
+      </div>
+
+      <div class="col-md-3 mb-3">
+        <strong>Stock Mínimo (Alerta):</strong><br>
+        {{ producto.stock_minimo|default:"0" }}
+      </div>
+
     </div>
   </div>
 

@@ -42,7 +42,7 @@
                         <td>{{ detalle.cantidad }}</td>
                         <td>${{ detalle.precio_unitario|floatformat:2 }}</td>
                         {# Calculamos el subtotal en el template para visualización #}
-                        <td>${{ detalle.cantidad|times:detalle.precio_unitario|floatformat:2 }}</td>
+                        <td>${{ detalle.subtotal|floatformat:2 }}</td>
                     </tr>
                 {% empty %}
                     <tr>

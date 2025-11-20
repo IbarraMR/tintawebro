@@ -103,19 +103,19 @@
 
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <span class="text-secondary small">Insumos críticos</span>
-                <span class="fs-4 text-danger">{{ insumos_criticos_count }}</span>
+                <span class="fs-4 text-danger">{{ insumos_criticos|length }}</span>
             </div>
 
             {% if insumos_criticos %}
-                <ul class="list-group list-group-flush small" style="max-height:180px; overflow-y:auto;">
-                    {% for ins in insumos_criticos|slice:":5" %}
-                        <li class="list-group-item d-flex justify-content-between"
-                            style="background:#111; border-color:#222;">
+                <div style="max-height:230px; overflow-y:auto; padding-right:4px;">
+                    {% for ins in insumos_criticos %}
+                        <div class="d-flex justify-content-between align-items-center
+                                    bg-black border border-secondary rounded p-2 mb-2">
                             <span class="text-white">{{ ins.nombre }}</span>
                             <span class="badge bg-danger">{{ ins.stock_actual }}</span>
-                        </li>
+                        </div>
                     {% endfor %}
-                </ul>
+                </div>
             {% else %}
                 <p class="text-secondary small">No hay insumos en alerta.</p>
             {% endif %}
@@ -123,6 +123,7 @@
             <a href="{% url 'insumos_list' %}" class="btn btn-outline-danger btn-sm mt-3">
                 Revisar insumos
             </a>
+
         </div>
     </div>
 

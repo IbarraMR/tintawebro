@@ -28,7 +28,6 @@
                 <tr>
                     <th>ID Compra</th>
                     <th>Proveedor</th>
-                    <th>Empleado</th>
                     <th>Fecha</th>
                     <th>Total</th>
                     <th>Acciones</th>
@@ -41,7 +40,6 @@
                     <tr>
                         <td>{{ compra.id_compra }}</td>
                         <td>{{ compra.proveedor.nombre }}</td>
-                        <td>{{ compra.empleado.nombre }}</td>
                         <td>{{ compra.fecha|date:"Y-m-d H:i" }}</td>
                         <td>${{ compra.total|floatformat:2 }}</td>
 

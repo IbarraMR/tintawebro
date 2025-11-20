@@ -26,6 +26,7 @@ from tinta_negra_web.views import (
     pedido_cambiar_estado,
 )
 
+
 urlpatterns = [
 
     path('admin/', admin.site.urls),
@@ -40,6 +41,7 @@ urlpatterns = [
     path('clientes/editar/<int:pk>/', views.cliente_edit, name='cliente_edit'),
     path('clientes/eliminar/<int:pk>/', views.cliente_delete, name='cliente_delete'),
     path('clientes/<int:pk>/compras/', views.compras_cliente, name='compras_cliente'),
+    path("clientes/<int:pk>/pedidos/", views.cliente_pedidos, name="cliente_pedidos"),
 
     path('proveedores/', views.proveedores_list, name='proveedores_list'),
     path('proveedor/nuevo/', views.proveedor_create, name='proveedor_create'),
@@ -128,5 +130,6 @@ urlpatterns = [
 
     path("api/grafico/ventas/", views.api_grafico_ventas, name="api_grafico_ventas"),
     path("reportes/ventas/pdf/", views.reporte_ventas_pdf, name="reporte_ventas_pdf"),
+    path('clientes/create/ajax/', views.cliente_create_ajax, name='cliente_create_ajax'),
 
 ]

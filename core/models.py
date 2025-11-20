@@ -242,6 +242,7 @@ class Productos(models.Model):
     id_producto = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=120)
     descripcion = models.TextField(blank=True, null=True)
+    costo_inicial = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     precio = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     tipo = models.ForeignKey(
         TiposProducto,
@@ -261,7 +262,6 @@ class Productos(models.Model):
 
     def __str__(self):
         return self.nombre
-
 
 
 class PedidosProductos(models.Model):
@@ -384,7 +384,7 @@ class DetallesCompra(models.Model):
 class PedidosInsumos(models.Model):
     id_detalle_pedido = models.AutoField(primary_key=True)
     pedido = models.ForeignKey(Pedidos, on_delete=models.CASCADE, related_name='detalles')
-    insumo = models.ForeignKey(Insumos, on_delete=models.RESTRICT) 
+    insumo = models.ForeignKey(Insumos, on_delete=models.RESTRICT)
     cantidad = models.DecimalField(max_digits=10, decimal_places=2)
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
 
