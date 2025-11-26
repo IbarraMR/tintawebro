@@ -14,7 +14,7 @@ from tinta_negra_web.views import (
     agregar_insumo_presupuesto,
     presupuesto_detalle,
     presupuestos_list,
-    presupuesto_create,
+    presupuesto_create, 
     eliminar_insumo_presupuesto,
     editar_insumo_presupuesto,
     movimientos_stock_list,
@@ -68,7 +68,7 @@ urlpatterns = [
     path('compras/nueva/', views.compras_create, name='compras_create'),
     path('compras/<int:pk>/', views.compra_detalle, name='compra_detalle'),
 
-    path("presupuesto/nuevo/", presupuesto_create, name="presupuesto_create"),
+    path("presupuesto/nuevo/", views.presupuesto_create, name="presupuesto_create"),
     path("presupuestos/", views.presupuestos_list, name="presupuestos_list"),
     path("presupuesto/<int:pk>/detalle/", presupuesto_detalle, name="presupuesto_detalle"),
 

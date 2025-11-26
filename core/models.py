@@ -78,6 +78,7 @@ class MovimientosCaja(models.Model):
     referencia_id = models.IntegerField(blank=True, null=True)
     creado_por = models.ForeignKey("Empleados", on_delete=models.PROTECT)
     saldo_resultante = models.DecimalField(max_digits=12, decimal_places=2)
+    revertido = models.BooleanField(default=False)
 
     class Meta:
         db_table = "movimientos_caja"

@@ -27,6 +27,26 @@
     </div>
 </form>
 
+<!-- BOTONES DE FILTRO POR ESTADO -->
+<div class="d-flex gap-2 mb-3">
+
+    <a href="{% url 'presupuestos_list' %}"
+       class="btn btn-sm {% if not filtro_estado %}btn-primary{% else %}btn-outline-primary{% endif %}">
+        Todos
+    </a>
+
+    <a href="?estado=EN ESPERA{% if q %}&q={{ q }}{% endif %}"
+       class="btn btn-sm {% if filtro_estado == 'EN ESPERA' %}btn-warning{% else %}btn-outline-warning{% endif %}">
+        En espera
+    </a>
+
+    <a href="?estado=CONFIRMADO{% if q %}&q={{ q }}{% endif %}"
+       class="btn btn-sm {% if filtro_estado == 'CONFIRMADO' %}btn-success{% else %}btn-outline-success{% endif %}">
+        Confirmados
+    </a>
+
+</div>
+
 <!-- CONTENEDOR -->
 <div class="card p-4" style="background-color: #1f1f1f; border:1px solid #333;">
     <div class="table-responsive">
@@ -64,7 +84,15 @@
                         ${{ presupuesto.ganancia_real|default_if_none:"0"|floatformat:2 }}
                     </td>
 
-                    <td>{{ presupuesto.estado_presupuesto }}</td>
+                    <td>
+                        <span class="badge
+                            {% if presupuesto.estado_presupuesto == 'EN ESPERA' %}bg-warning text-dark
+                            {% elif presupuesto.estado_presupuesto == 'CONFIRMADO' %}bg-success
+                            {% else %}bg-secondary
+                            {% endif %}">
+                            {{ presupuesto.estado_presupuesto }}
+                        </span>
+                    </td>
 
                     <td class="text-center">
 
@@ -98,21 +126,26 @@
 
                 {% if presupuestos.has_previous %}
                 <li class="page-item">
-                    <a class="page-link" href="?q={{ q }}&page={{ presupuestos.previous_page_number }}">
+                    <a class="page-link"
+                        href="?{% if q %}q={{ q }}&{% endif %}{% if filtro_estado %}estado={{ filtro_estado }}&{% endif %}page={{ presupuestos.previous_page_number }}">
                         &laquo; Anterior
                     </a>
                 </li>
                 {% endif %}
 
                 {% for num in presupuestos.paginator.page_range %}
-                <li class="page-item {% if presupuestos.number == num %} active {% endif %}">
-                    <a class="page-link" href="?q={{ q }}&page={{ num }}">{{ num }}</a>
+                <li class="page-item {% if presupuestos.number == num %}active{% endif %}">
+                    <a class="page-link"
+                        href="?{% if q %}q={{ q }}&{% endif %}{% if filtro_estado %}estado={{ filtro_estado }}&{% endif %}page={{ num }}">
+                        {{ num }}
+                    </a>
                 </li>
                 {% endfor %}
 
                 {% if presupuestos.has_next %}
                 <li class="page-item">
-                    <a class="page-link" href="?q={{ q }}&page={{ presupuestos.next_page_number }}">
+                    <a class="page-link"
+                        href="?{% if q %}q={{ q }}&{% endif %}{% if filtro_estado %}estado={{ filtro_estado }}&{% endif %}page={{ presupuestos.next_page_number }}">
                         Siguiente &raquo;
                     </a>
                 </li>

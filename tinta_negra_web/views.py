@@ -30,6 +30,8 @@ from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from xhtml2pdf import pisa
 from datetime import date, timedelta
+from datetime import datetime
+
 from core.forms import (
     ClienteForm, ComprasForm, DetallesCompraFormSet, EmpleadoForm, 
     FormaPagoForm, InsumoForm, MovimientoCajaForm, ProveedorForm, 
@@ -674,27 +676,49 @@ def insumo_nuevo_ajax(request):
         "precio_costo_unitario": str(insumo.precio_costo_unitario or "0.00"),
     })
 
+from decimal import Decimal
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+from core.models import Presupuestos, PresupuestosInsumos, Insumos
+
 def agregar_insumo_presupuesto(request, presupuesto_id):
     if request.method == "POST":
         presupuesto = get_object_or_404(Presupuestos, id_presupuesto=presupuesto_id)
         insumo = get_object_or_404(Insumos, id_insumo=request.POST["insumo_id"])
         cantidad_usada = Decimal(request.POST["cantidad_usada"])
-        cantidad_real = cantidad_usada / Decimal(insumo.factor_conversion)
-        subtotal = cantidad_real * insumo.precio_costo_unitario
+        factor = Decimal(insumo.factor_conversion or 1)
+        cantidad_real = cantidad_usada / factor  
+
+        if cantidad_real > Decimal(insumo.stock_actual or 0):
+            return JsonResponse({
+                "success": False,
+                "error": f"No hay stock suficiente de \"{insumo.nombre}\". "
+                         f"Disponible: {insumo.stock_actual} (unidad base)"
+            })
+
+        subtotal = cantidad_real * Decimal(insumo.precio_costo_unitario)
+
         PresupuestosInsumos.objects.create(
             presupuesto=presupuesto,
             id_insumo=insumo,
-            cantidad=cantidad_real,               
+            cantidad=cantidad_real,
             precio_unitario=insumo.precio_costo_unitario,
         )
+
         presupuesto.subtotal = (presupuesto.subtotal or Decimal(0)) + subtotal
+
         if presupuesto.margen_ganancia:
-            presupuesto.total_presupuesto = presupuesto.subtotal + (presupuesto.subtotal * presupuesto.margen_ganancia / 100)
+            presupuesto.total_presupuesto = presupuesto.subtotal + (
+                presupuesto.subtotal * presupuesto.margen_ganancia / 100
+            )
         else:
             presupuesto.total_presupuesto = presupuesto.subtotal
+
         presupuesto.save()
         return JsonResponse({"success": True})
+
     return JsonResponse({"success": False})
+
 
 
 @never_cache
@@ -1056,29 +1080,45 @@ def empleado_delete(request, pk):
     list(messages.get_messages(request))
     return redirect('empleados_list')
 
+
 @never_cache
 @login_required
 @permission_required('core.change_empleados', raise_exception=True)
 def empleado_baja_logica(request, pk):
     empleado = get_object_or_404(Empleados, pk=pk)
+
     if Cajas.objects.filter(id_empleado=empleado, caja_cerrada=False).exists():
         messages.error(request, f"No se puede dar de baja a {empleado.nombre} {empleado.apellido} porque tiene una caja abierta.")
         return redirect('empleados_list')
+
     empleado.is_active = False
     empleado.save()
+
+    if empleado.user:
+        empleado.user.is_active = False
+        empleado.user.save()
+
     messages.warning(request, f"Empleado {empleado.nombre} {empleado.apellido} dado de baja correctamente.")
     return redirect('empleados_list')
+
 
 @never_cache
 @login_required
 @permission_required('core.change_empleados', raise_exception=True)
 def empleado_reactivar(request, pk):
     empleado = get_object_or_404(Empleados, pk=pk)
+
     empleado.is_active = True
     empleado.save()
+
+    if empleado.user:
+        empleado.user.is_active = True
+        empleado.user.save()
+
     messages.success(request, f"Empleado {empleado.nombre} {empleado.apellido} reactivado correctamente.", extra_tags="empleado")
     list(messages.get_messages(request))
     return redirect('empleados_list')
+
 
 @never_cache
 @login_required
@@ -1163,7 +1203,10 @@ def presupuestos_list(request):
     from core.models import Productos
 
     q = request.GET.get("q", "").strip()
-    presupuestos_qs = Presupuestos.objects.select_related("id_cliente").order_by("-id_presupuesto")
+    filtro_estado = request.GET.get("estado", "").strip()
+    presupuestos_qs = Presupuestos.objects.select_related("id_cliente") \
+        .exclude(estado_presupuesto="Borrador") \
+        .order_by("-id_presupuesto")
 
     if q:
         presupuestos_qs = presupuestos_qs.filter(
@@ -1172,50 +1215,54 @@ def presupuestos_list(request):
             Q(id_cliente__apellido__icontains=q)
         )
 
+    if filtro_estado:
+        presupuestos_qs = presupuestos_qs.filter(estado_presupuesto=filtro_estado)
+
     paginator = Paginator(presupuestos_qs, 15)
     page_number = request.GET.get("page")
     presupuestos = paginator.get_page(page_number)
 
     for pre in presupuestos:
-
         costo_trabajos = sum([
             float(t.subtotal_insumos or 0)
             for t in pre.trabajos.all()
         ])
 
         costo_productos = 0
-
         for t in pre.trabajos.all():
             try:
                 producto = Productos.objects.get(nombre=t.nombre_trabajo)
-
                 if producto.tipo.nombre_tipo.lower() == "tercerizado":
                     costo_productos += float(producto.costo_inicial or 0) * int(t.cantidad)
-
             except Productos.DoesNotExist:
                 pass
+
         costo_total_real = costo_trabajos + costo_productos
-        pre.ganancia_real = round(
-            float(pre.total_presupuesto or 0) - costo_total_real,
-            2
-        )
+        pre.ganancia_real = round(float(pre.total_presupuesto or 0) - costo_total_real, 2)
 
     return render(request, "core/presupuestos/presupuestos_list.html", {
         "presupuestos": presupuestos,
         "page_obj": presupuestos,
         "q": q,
+        "filtro_estado": filtro_estado
     })
 
 
+
+from django.utils import timezone
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import redirect
+from core.models import Presupuestos
+
 @login_required
 def presupuesto_create(request):
-
     presupuesto = Presupuestos.objects.create(
-        fecha_emision=timezone.now().date(),
-        estado_presupuesto="Borrador",
-        total_presupuesto=0
+        fecha_emision=timezone.now(),
+        estado_presupuesto="EN ESPERA",
+        total_presupuesto=0,
     )
-    return redirect("presupuesto_edit", presupuesto.id_presupuesto)
+
+    return redirect("presupuesto_edit", presupuesto_id=presupuesto.id_presupuesto)
 
 
 
@@ -1238,7 +1285,6 @@ def configuracion(request):
         "user_email": request.user.email,
     })
 
-
 @login_required
 @transaction.atomic
 def convertir_presupuesto_a_pedido(request, pk):
@@ -1249,7 +1295,7 @@ def convertir_presupuesto_a_pedido(request, pk):
 
     presupuesto = get_object_or_404(Presupuestos, id_presupuesto=pk)
     if not presupuesto.id_cliente:
-        messages.error(request, "❌ No podés generar un pedido sin seleccionar un cliente.")
+        messages.error(request, "No podés generar un pedido sin seleccionar un cliente.")
         return redirect("presupuesto_detalle", pk)
 
     pedido = Pedidos.objects.create(
@@ -1266,20 +1312,19 @@ def convertir_presupuesto_a_pedido(request, pk):
 
     for trabajo in trabajos:
 
-        producto_catalogo = None
         try:
             producto_catalogo = Productos.objects.get(nombre=trabajo.nombre_trabajo)
         except Productos.DoesNotExist:
             producto_catalogo = None
 
         if producto_catalogo:
+            precio_unitario = producto_catalogo.precio_venta or 0
 
             PedidosProductos.objects.create(
-                pedido=pedido,
-                producto=producto_catalogo,
+                id_pedido=pedido,
+                id_producto=producto_catalogo,
                 cantidad=trabajo.cantidad,
-                precio_unitario=producto_catalogo.precio,
-                subtotal=producto_catalogo.precio * trabajo.cantidad
+                precio_unitario=precio_unitario,
             )
 
             if producto_catalogo.tipo.nombre_tipo.lower() == "tercerizado":
@@ -1294,20 +1339,21 @@ def convertir_presupuesto_a_pedido(request, pk):
                     cantidad=trabajo.cantidad,
                     detalle=f"Uso de producto en Pedido #{pedido.id_pedido}"
                 )
+
         insumos_trabajo = TrabajoInsumo.objects.filter(trabajo=trabajo)
 
         for det in insumos_trabajo:
+            insumo = det.insumo
+            factor = float(insumo.factor_conversion or 1)
+            cantidad_real = float(det.cantidad) / factor
 
             PedidosInsumos.objects.create(
                 pedido=pedido,
-                insumo=det.insumo,
+                insumo=insumo,
                 cantidad=det.cantidad,
                 precio_unitario=det.precio_unitario,
             )
 
-            insumo = det.insumo
-            factor = float(insumo.factor_conversion or 1)
-            cantidad_real = float(det.cantidad) / factor
             stock_antes = float(insumo.stock_actual or 0)
             insumo.stock_actual = stock_antes - cantidad_real
             insumo.save()
@@ -1321,16 +1367,18 @@ def convertir_presupuesto_a_pedido(request, pk):
 
     pedido.stock_descontado = True
     pedido.save()
+
     presupuesto.estado_presupuesto = "CONFIRMADO"
     presupuesto.save()
 
     messages.success(
         request,
-        f"✅ Pedido #{pedido.id_pedido} generado y puesto en producción. Se descontó stock.",
+        f"Pedido #{pedido.id_pedido} generado y puesto en producción. Se descontó stock.",
         extra_tags="success"
     )
 
     return redirect("pedidos_list")
+
 
 
 
@@ -1929,7 +1977,6 @@ def agregar_trabajo(request, presupuesto_id):
         except Presupuestos.DoesNotExist:
             return JsonResponse({"ok": False, "error": "Presupuesto no encontrado."}, status=404)
 
-    # Debe haber cliente antes de agregar trabajos
     if not presupuesto.id_cliente:
         return JsonResponse({
             "ok": False,
@@ -1995,11 +2042,22 @@ def agregar_trabajo(request, presupuesto_id):
             cant = Decimal("1")
         if cant < 1:
             return JsonResponse({"ok": False, "error": "Las cantidades de insumos deben ser ≥ 1."})
-        if cant > insumo.stock_actual:
+        factor = Decimal(insumo.factor_conversion or 1)
+        cantidad_real = cant / factor  # cantidad equivalente en stock real
+
+        if cantidad_real > Decimal(insumo.stock_actual or 0):
+            disponible_real = float(insumo.stock_actual or 0)
+            disponible_hojas = disponible_real * float(factor)
+            
             return JsonResponse({
                 "ok": False,
-                "error": f"No hay stock suficiente de '{insumo.nombre}'. Disponible: {insumo.stock_actual}"
+                "error": (
+                    f"No hay stock suficiente de '{insumo.nombre}'. "
+                    f"Disponible: {disponible_real:.2f} unidades "
+                    f"(≈ {disponible_hojas:.0f} hojas)"
+                )
             })
+                
 
     editar_id = request.POST.get("editar_trabajo_id")
     if editar_id:
@@ -2775,10 +2833,10 @@ def render_pdf(template_src, context_dict={}):
     return result.getvalue()
 
 
+
 @login_required
 @transaction.atomic
 def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
-
     if request.method != "POST":
         return JsonResponse({"error": "Método no permitido"}, status=405)
 
@@ -2792,7 +2850,6 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
     from django.utils import timezone
     from core.models import (
         StockMovimientos,
-        PedidosInsumos,
         PedidosProductos,
         ProductosInsumos,
         MovimientosCaja,
@@ -2801,10 +2858,17 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
         FormaPago
     )
 
+    empleado = Empleados.objects.filter(user=request.user).first()
+    movimiento_existente = MovimientosCaja.objects.filter(
+        referencia_id=pedido.id_pedido,
+        tipo=MovimientosCaja.Tipo.INGRESO,
+        origen=MovimientosCaja.Origen.VENTA,
+        revertido=False
+    ).first()
+
     if nuevo_estado == "ENTREGADO":
 
         if not pedido.stock_descontado:
-
             detalles = pedido.detalles.all()
             productos_pedido = PedidosProductos.objects.filter(id_pedido=pedido)
 
@@ -2812,219 +2876,119 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
                 insumo = det.insumo
                 factor = Decimal(insumo.factor_conversion or 1)
                 cantidad_real = Decimal(det.cantidad) / factor
-
                 insumo.stock_actual -= cantidad_real
                 if insumo.stock_actual < 0:
-                    insumo.stock_actual = Decimal("0")
+                    insumo.stock_actual = 0
                 insumo.save()
-
                 StockMovimientos.objects.create(
                     insumo=insumo,
                     tipo="salida",
                     cantidad=cantidad_real,
-                    detalle=f"Uso en Pedido #{pedido.id_pedido}"
+                    detalle=f"Salida por Pedido #{pedido.id_pedido}"
                 )
 
             for item in productos_pedido:
                 producto = item.id_producto
                 if producto.tipo and producto.tipo.nombre_tipo.upper() == "TERCERIZADO":
-
                     producto.stock_actual -= Decimal(item.cantidad)
                     if producto.stock_actual < 0:
-                        producto.stock_actual = Decimal("0")
+                        producto.stock_actual = 0
                     producto.save()
 
             for item in productos_pedido:
                 producto = item.id_producto
                 if producto.tipo and producto.tipo.nombre_tipo.upper() == "PERSONALIZADO":
-
                     receta = ProductosInsumos.objects.filter(producto=producto)
-
                     for pi in receta:
                         insumo = pi.insumo
                         factor = Decimal(insumo.factor_conversion or 1)
                         cantidad_real = (Decimal(pi.cantidad) * Decimal(item.cantidad)) / factor
-
                         insumo.stock_actual -= cantidad_real
-                        if insumo.stock_actual < 0:
-                            insumo.stock_actual = Decimal("0")
                         insumo.save()
-
                         StockMovimientos.objects.create(
                             insumo=insumo,
                             tipo="salida",
                             cantidad=cantidad_real,
-                            detalle=f"Consumo Receta Producto Personalizado (Pedido #{pedido.id_pedido})"
+                            detalle=f"Receta Personalizado (Pedido #{pedido.id_pedido})"
                         )
 
             pedido.stock_descontado = True
+        if not movimiento_existente:
+            try:
+                caja = Cajas.objects.filter(caja_cerrada=False).latest("id_caja")
+            except Cajas.DoesNotExist:
+                return JsonResponse({"error": "No hay caja abierta"}, status=400)
 
-        try:
-            caja_abierta = Cajas.objects.filter(caja_cerrada=False).latest("id_caja")
-        except Cajas.DoesNotExist:
-            return JsonResponse({
-                "error": "No hay caja abierta para registrar el cobro."
-            }, status=400)
-
-        empleado = Empleados.objects.filter(user=request.user).first()
-
-        monto_cobrado = pedido.total_pedido or 0
-        forma_pago = getattr(pedido, "forma_pago", None)
-        if not forma_pago:
-            forma_pago = FormaPago.objects.first()
-
-        saldo_anterior = caja_abierta.saldo_sistema
-        saldo_nuevo = saldo_anterior + monto_cobrado
-
-        MovimientosCaja.objects.create(
-            caja=caja_abierta,
-            tipo=MovimientosCaja.Tipo.INGRESO,
-            forma_pago=forma_pago,
-            monto=monto_cobrado,
-            descripcion=f"Cobro de Pedido #{pedido.id_pedido}",
-            origen=MovimientosCaja.Origen.VENTA,
-            referencia_id=pedido.id_pedido,
-            creado_por=empleado,
-            saldo_resultante=saldo_nuevo
-        )
+            monto = pedido.total_pedido or 0
+            forma_pago = FormaPago.objects.filter(activo=True).first() or FormaPago.objects.first()
+            saldo_nuevo = caja.saldo_sistema + monto
+            mov = MovimientosCaja.objects.create(
+                caja=caja,
+                tipo=MovimientosCaja.Tipo.INGRESO,
+                forma_pago=forma_pago,
+                monto=monto,
+                descripcion=f"Cobro de Pedido #{pedido.id_pedido}",
+                origen=MovimientosCaja.Origen.VENTA,
+                referencia_id=pedido.id_pedido,
+                creado_por=empleado,
+                saldo_resultante=saldo_nuevo,
+                revertido=False
+            )
 
         pedido.id_estado = estado
         pedido.fecha_entrega_real = timezone.now().date()
         pedido.save()
-
         return JsonResponse({
             "success": True,
             "nuevo_estado": estado.nombre_estado,
-            "fecha_entrega_real": pedido.fecha_entrega_real.strftime("%d/%m/%Y"),
-            "monto": float(monto_cobrado),
-            "cobro_registrado": True
+            "cobrado": True
         })
 
-    if nuevo_estado == "EN PRODUCCIÓN":
+    if movimiento_existente and nuevo_estado != "ENTREGADO":
 
-        if pedido.stock_descontado is False and pedido.id_estado.nombre_estado == "CANCELADO":
+        try:
+            caja = Cajas.objects.filter(caja_cerrada=False).latest("id_caja")
+        except Cajas.DoesNotExist:
+            return JsonResponse({"error": "No hay caja abierta"}, status=400)
 
-            detalles = pedido.detalles.all()
-            productos_pedido = PedidosProductos.objects.filter(id_pedido=pedido)
+        saldo_nuevo = caja.saldo_sistema - movimiento_existente.monto
+        MovimientosCaja.objects.create(
+            caja=caja,
+            tipo=MovimientosCaja.Tipo.EGRESO,
+            forma_pago=movimiento_existente.forma_pago,
+            monto=movimiento_existente.monto,
+            descripcion=f"Reversión entrega Pedido #{pedido.id_pedido}",
+            origen=MovimientosCaja.Origen.VENTA,
+            referencia_id=pedido.id_pedido,
+            creado_por=empleado,
+            saldo_resultante=saldo_nuevo,
+            revertido=False
+        )
 
-            for det in detalles:
-                insumo = det.insumo
-                factor = Decimal(insumo.factor_conversion or 1)
-                cantidad_real = Decimal(det.cantidad) / factor
-
-                insumo.stock_actual += cantidad_real
-                insumo.save()
-
-                StockMovimientos.objects.create(
-                    insumo=insumo,
-                    tipo="entrada",
-                    cantidad=cantidad_real,
-                    detalle=f"Reversión de Cancelación (Pedido #{pedido.id_pedido})"
-                )
-
-            for item in productos_pedido:
-                producto = item.id_producto
-                if producto.tipo and producto.tipo.nombre_tipo.upper() == "TERCERIZADO":
-                    producto.stock_actual += Decimal(item.cantidad)
-                    producto.save()
-
-            for item in productos_pedido:
-                producto = item.id_producto
-                if producto.tipo and producto.tipo.nombre_tipo.upper() == "PERSONALIZADO":
-
-                    receta = ProductosInsumos.objects.filter(producto=producto)
-
-                    for pi in receta:
-                        insumo = pi.insumo
-                        factor = Decimal(insumo.factor_conversion or 1)
-                        cantidad_real = (Decimal(pi.cantidad) * Decimal(item.cantidad)) / factor
-
-                        insumo.stock_actual += cantidad_real
-                        insumo.save()
-
-                        StockMovimientos.objects.create(
-                            insumo=insumo,
-                            tipo="entrada",
-                            cantidad=cantidad_real,
-                            detalle=f"Reversión Receta Personalizado (Pedido #{pedido.id_pedido})"
-                        )
-
-        pedido.id_estado = estado
-        pedido.save()
-
-        return JsonResponse({
-            "success": True,
-            "nuevo_estado": estado.nombre_estado
-        })
-
-    if nuevo_estado == "CANCELADO":
-
+        movimiento_existente.revertido = True
+        movimiento_existente.save()
         if pedido.stock_descontado:
-
             detalles = pedido.detalles.all()
             productos_pedido = PedidosProductos.objects.filter(id_pedido=pedido)
-
             for det in detalles:
                 insumo = det.insumo
                 factor = Decimal(insumo.factor_conversion or 1)
                 cantidad_real = Decimal(det.cantidad) / factor
-
                 insumo.stock_actual += cantidad_real
                 insumo.save()
-
-                StockMovimientos.objects.create(
-                    insumo=insumo,
-                    tipo="entrada",
-                    cantidad=cantidad_real,
-                    detalle=f"Devolución por Cancelación Pedido #{pedido.id_pedido}"
-                )
-
             for item in productos_pedido:
                 producto = item.id_producto
-                if producto.tipo and producto.tipo.nombre_tipo.upper() == "TERCERIZADO":
-                    producto.stock_actual += Decimal(item.cantidad)
-                    producto.save()
-
-            for item in productos_pedido:
-                producto = item.id_producto
-                if producto.tipo and producto.tipo.nombre_tipo.upper() == "PERSONALIZADO":
-
-                    receta = ProductosInsumos.objects.filter(producto=producto)
-
-                    for pi in receta:
-                        insumo = pi.insumo
-                        factor = Decimal(insumo.factor_conversion or 1)
-                        cantidad_real = (Decimal(pi.cantidad) * Decimal(item.cantidad)) / factor
-
-                        insumo.stock_actual += cantidad_real
-                        insumo.save()
-
-                        StockMovimientos.objects.create(
-                            insumo=insumo,
-                            tipo="entrada",
-                            cantidad=cantidad_real,
-                            detalle=f"Devolución Receta Personalizado (Pedido #{pedido.id_pedido})"
-                        )
-
+                producto.stock_actual += Decimal(item.cantidad)
+                producto.save()
             pedido.stock_descontado = False
-
-        pedido.id_estado = estado
-        pedido.save()
-
-        return JsonResponse({
-            "success": True,
-            "nuevo_estado": estado.nombre_estado,
-            "stock_devuelto": True
-        })
-
-
     pedido.id_estado = estado
     pedido.save()
-
     return JsonResponse({
         "success": True,
-        "nuevo_estado": estado.nombre_estado
+        "nuevo_estado": nuevo_estado,
+        "reversado": True if movimiento_existente else False
     })
+
 
 
 
