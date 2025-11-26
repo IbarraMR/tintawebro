@@ -11,13 +11,35 @@
 
         <form id="formClienteModal">
           {% csrf_token %}
-          
-          <input type="text" name="nombre" class="form-control mb-2" placeholder="Nombre" required>
-          <input type="text" name="apellido" class="form-control mb-2" placeholder="Apellido">
-          <input type="text" name="dni" class="form-control mb-2" placeholder="DNI">
-          <input type="email" name="email" class="form-control mb-2" placeholder="E-mail">
-          <input type="text" name="telefono" class="form-control mb-2" placeholder="Teléfono">
-          <input type="text" name="direccion" class="form-control mb-2" placeholder="Dirección">
+
+          <input type="text" name="nombre" class="form-control mb-2"
+                 placeholder="Nombre" required>
+
+          <input type="text" name="apellido" class="form-control mb-2"
+                 placeholder="Apellido">
+
+          <!-- DNI solo números 7–10 dígitos -->
+          <input type="text" name="dni" class="form-control mb-2"
+                 placeholder="DNI"
+                 inputmode="numeric"
+                 pattern="[0-9]{7,10}"
+                 title="Solo números, entre 7 y 10 dígitos">
+
+          <!-- Email con formato válido -->
+          <input type="email" name="email" class="form-control mb-2"
+                 placeholder="E-mail"
+                 pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+                 title="Debe ingresar un e-mail válido">
+
+          <!-- Teléfono solo números 6–15 dígitos -->
+          <input type="text" name="telefono" class="form-control mb-2"
+                 placeholder="Teléfono"
+                 inputmode="numeric"
+                 pattern="[0-9]{6,15}"
+                 title="Solo números, entre 6 y 15 dígitos">
+
+          <input type="text" name="direccion" class="form-control mb-2"
+                 placeholder="Dirección">
         </form>
 
       </div>
@@ -35,6 +57,13 @@
 document.getElementById("btnGuardarCliente").addEventListener("click", () => {
 
     const form = document.getElementById("formClienteModal");
+
+    // VALIDACIONES HTML5
+    if (!form.checkValidity()) {
+        form.reportValidity(); // Muestra los mensajes de cada input automáticamente
+        return;
+    }
+
     const data = new FormData(form);
 
     fetch("/clientes/create/ajax/", {

@@ -46,7 +46,7 @@ from core.models import (
 from core.utils_caja import registrar_movimiento
 import io, base64
 from django.db.models.functions import TruncDay, TruncWeek, TruncMonth, TruncYear
-from datetime import datetime, timedelta
+from datetime import timedelta
 from django.db import models
 from django.db.models import F
 
@@ -274,7 +274,7 @@ def proveedor_create(request):
 @login_required
 @permission_required('core.change_proveedores', raise_exception=True)
 def proveedor_edit(request, pk):
-    proveedor = get_object_or_404(Proveedor, pk=pk)
+    proveedor = get_object_or_404(Proveedores, id_proveedor=pk)
     if request.method == 'POST':
         form = ProveedorForm(request.POST, instance=proveedor)
         if form.is_valid():
@@ -291,46 +291,71 @@ def proveedor_edit(request, pk):
         'form': form, 'title': f'Editar Proveedor: {proveedor.nombre}', 'is_create': False
     })
 
+
 @never_cache
 @login_required
-@permission_required('core.change_proveedores', raise_exception=True)
-def proveedor_baja_logica(request, pk):
-    proveedor = get_object_or_404(Proveedor, pk=pk)
-    if hasattr(proveedor, 'compras') and proveedor.compras.exists():
-        messages.error(request, 'No se puede dar de baja este proveedor porque tiene compras asociadas.')
-        list(messages.get_messages(request))
-        return redirect('proveedores_list')
+@permission_required("core.delete_proveedores", raise_exception=True)
+def proveedor_baja(request, pk):
+    proveedor = get_object_or_404(Proveedores, id_proveedor=pk)
+    tiene_compras = proveedor.compras_set.exists() if hasattr(proveedor, "compras_set") else False
+    if tiene_compras:
+        proveedor.is_active = False
+        proveedor.save()
+        messages.success(
+            request,
+            f"El proveedor {proveedor.nombre} fue dado de baja (tiene compras asociadas)."
+        )
+    else:
+        proveedor.delete()
 
-    proveedor.is_active = False
-    proveedor.save()
-    messages.success(request, f'Proveedor {proveedor.razon_social} dado de baja exitosamente.', extra_tags="proveedor")
-    list(messages.get_messages(request))
-    return redirect('proveedores_list')
+        messages.success(
+            request,
+            f"Proveedor eliminado definitivamente (no tenía compras asociadas)."
+        )
+    return redirect("proveedores_list")
+
 
 @never_cache
 @login_required
 @permission_required('core.change_proveedores', raise_exception=True)
 def proveedor_reactivar(request, pk):
-    proveedor = get_object_or_404(Proveedor, pk=pk)
+    proveedor = get_object_or_404(Proveedores, pk=pk)
     proveedor.is_active = True
     proveedor.save()
-    messages.success(request, f'Proveedor {proveedor.razon_social} reactivado exitosamente.', extra_tags="proveedor")
-    list(messages.get_messages(request))
+    messages.success(request, f'Proveedor {proveedor.nombre} reactivado correctamente.')
     return redirect('proveedores_list')
 
+
+
+
+from django.db.models import Q
+from django.core.paginator import Paginator
 
 @never_cache
 @login_required
 @permission_required('core.view_insumos', raise_exception=True)
 def insumos_list(request):
 
-    lista_insumos = Insumos.objects.all().order_by('nombre')
+    # 🔍 Buscar por nombre o proveedor
+    query = request.GET.get("q", "").strip()
+
+    lista_insumos = Insumos.objects.all().order_by("nombre")
+
+    if query:
+        lista_insumos = lista_insumos.filter(
+            Q(nombre__icontains=query) |
+            Q(proveedor__nombre__icontains=query)
+        )
     paginator = Paginator(lista_insumos, 15)
     page_number = request.GET.get("page")
     insumos = paginator.get_page(page_number)
+
     return render(request, 'core/insumos/insumos_list.html', {
-        'insumos': insumos
+        'insumos': insumos,
+        'query': query,
     })
+
+
 
 @never_cache
 @login_required
@@ -406,17 +431,25 @@ def compras_create(request):
             return redirect('home')
 
         if form.is_valid() and formset.is_valid():
-            total_compra = 0
+            from decimal import Decimal
+
+            total_compra = Decimal('0.00')
 
             for detalle_form in formset:
+                if detalle_form.cleaned_data.get("DELETE"):
+                    continue
+
                 insumo = detalle_form.cleaned_data.get("insumo")
                 cantidad = detalle_form.cleaned_data.get("cantidad")
                 precio_unitario = detalle_form.cleaned_data.get("precio_unitario")
 
-                if not insumo or detalle_form.cleaned_data.get("DELETE"):
-                    continue  
+                if not insumo:
+                    continue
+
                 if cantidad and precio_unitario:
-                    total_compra += cantidad * precio_unitario
+                    cant = Decimal(str(cantidad))
+                    pu = Decimal(str(precio_unitario))
+                    total_compra += cant * pu
 
             if caja_abierta.saldo_sistema < total_compra:
                 messages.error(
@@ -427,21 +460,39 @@ def compras_create(request):
                 return redirect('compras_create')
 
             compra = form.save(commit=False)
+            compra.empleado = empleado_actual 
             compra.total = total_compra
             compra.save()
 
             for detalle_form in formset:
+                if detalle_form.cleaned_data.get("DELETE"):
+                    continue
+
                 insumo = detalle_form.cleaned_data.get("insumo")
                 cantidad = detalle_form.cleaned_data.get("cantidad")
+                precio_unitario = detalle_form.cleaned_data.get("precio_unitario")
 
-                if not insumo or detalle_form.cleaned_data.get("DELETE"):
-                    continue  
+                if not insumo or not cantidad or not precio_unitario:
+                    continue
 
                 detalle = detalle_form.save(commit=False)
                 detalle.compra = compra
                 detalle.save()
-                insumo.stock_actual = (insumo.stock_actual or 0) + cantidad
+
+                from decimal import Decimal
+                stock_actual = insumo.stock_actual or 0
+                stock_actual_dec = Decimal(str(stock_actual))
+                cantidad_dec = Decimal(str(cantidad))
+
+                insumo.stock_actual = stock_actual_dec + cantidad_dec
                 insumo.save()
+
+                StockMovimientos.objects.create(
+                    insumo=insumo,
+                    tipo='entrada',
+                    cantidad=cantidad_dec,
+                    detalle=f"Compra #{compra.id_compra} - {compra.proveedor.nombre if compra.proveedor else ''}"
+                )
 
             MovimientosCaja.objects.create(
                 caja=caja_abierta,
@@ -455,7 +506,11 @@ def compras_create(request):
                 saldo_resultante=caja_abierta.saldo_sistema - total_compra
             )
 
-            messages.success(request, f"✅ Compra #{compra.id_compra} registrada correctamente.", extra_tags="compra")
+            messages.success(
+                request,
+                f"✅ Compra #{compra.id_compra} registrada correctamente.",
+                extra_tags="compra"
+            )
             list(messages.get_messages(request))
             return redirect('compras_list')
 
@@ -480,21 +535,34 @@ def compras_create(request):
     return render(request, 'tinta_negra_web/compras_form.html', context)
 
 
+
 @never_cache
 @login_required
 def compras_list(request):
+
     storage = messages.get_messages(request)
     for _ in storage:
         pass
-    lista_compras = Compras.objects.all().order_by('-fecha')
+
+    query = request.GET.get("q", "").strip()
+
+    lista_compras = Compras.objects.select_related("proveedor").order_by('-fecha')
+
+    if query:
+        lista_compras = lista_compras.filter(
+            Q(id_compra__icontains=query) |
+            Q(proveedor__nombre__icontains=query)
+        )
+
     paginator = Paginator(lista_compras, 10)
     page_number = request.GET.get("page")
     compras = paginator.get_page(page_number)
 
-    context = {
-        'compras': compras
-    }
-    return render(request, 'tinta_negra_web/compras_list.html', context)
+    return render(request, 'tinta_negra_web/compras_list.html', {
+        'compras': compras,
+        'query': query,
+    })
+
 
 @never_cache
 @login_required
@@ -512,10 +580,25 @@ def compra_detalle(request, pk):
 @login_required
 @permission_required('core.delete_insumos', raise_exception=True)
 def insumo_delete(request, pk):
-    insumo = get_object_or_404(Insumos, id_insumo=pk)
+    insumo = get_object_or_404(Insumos, pk=pk)
+
     if request.method == 'POST':
-        insumo.delete()
-        messages.success(request, 'Insumo eliminado exitosamente.', extra_tags="insumo")
+        try:
+
+            insumo.delete()
+            messages.success(
+                request,
+                f"Insumo '{insumo.nombre}' eliminado correctamente."
+            )
+        except ProtectedError:
+            insumo.is_active = False
+            insumo.save()
+            messages.warning(
+                request,
+                f"El insumo '{insumo.nombre}' tiene movimientos asociados, "
+                "no se puede eliminar. Se marcó como INACTIVO."
+            )
+
         list(messages.get_messages(request))
         return redirect('insumos_list')
 
@@ -617,80 +700,61 @@ def agregar_insumo_presupuesto(request, presupuesto_id):
 @never_cache
 @login_required
 def cajas_list(request):
-    empleado = Empleados.objects.filter(user=request.user).first()
 
-    caja_actual = None
-    lista_cajas = Cajas.objects.none()
+    caja_abierta = Cajas.objects.filter(caja_cerrada=False).order_by('-id_caja').first()
 
-    if empleado:
-        caja_actual = Cajas.objects.filter(
-            id_empleado=empleado,
-            caja_cerrada=False
-        ).order_by('-id_caja').first()
-
-        lista_cajas = Cajas.objects.filter(
-            id_empleado=empleado
-        ).order_by('-id_caja')
-
+    lista_cajas = Cajas.objects.all().order_by('-id_caja')
     paginator = Paginator(lista_cajas, 15)
     page_number = request.GET.get("page")
     cajas = paginator.get_page(page_number)
-
     cierre_info = request.session.pop("cierre_info", None)
 
     return render(request, 'core/caja/cajas_list.html', {
-        'caja': caja_actual,
+        'caja_abierta': caja_abierta,
         'cajas': cajas,
         'cierre_info': cierre_info,
-        'page_obj': cajas, 
+        'page_obj': cajas,
     })
+
 
 
 @never_cache
 @login_required
-@permission_required('core.add_cajas', raise_exception=True)
 @transaction.atomic
 @require_http_methods(["GET", "POST"])
 def abrir_caja_view(request):
-    empleado = Empleados.objects.filter(user=request.user).first()
-    if not empleado:
-        messages.error(request, "No tenés un Empleado asociado a tu usuario.")
-        return redirect('empleados_list')
 
-    ultima_caja = Cajas.objects.filter(id_empleado=empleado).order_by('-id_caja').first()
+    ultima_caja = Cajas.objects.order_by('-id_caja').first()
 
     if ultima_caja and not ultima_caja.caja_cerrada:
-        messages.warning(request, "Ya tenés una caja abierta.")
+        messages.warning(request, "La caja ya está abierta.")
         return redirect('cajas_list')
-
     saldo_inicial = ultima_caja.saldo_final if ultima_caja else 0
 
     if request.method == 'POST':
         caja = Cajas.objects.create(
-            id_empleado=empleado,
+            id_empleado=None,  # CAJA GENERAL
             saldo_inicial=saldo_inicial,
             saldo_final=saldo_inicial,
             fecha_hora_apertura=timezone.now(),
             diferencia=0,
             tolerancia=100,
-            descripcion="Apertura automática con saldo del cierre anterior",
+            descripcion="Apertura automática (caja general)",
             caja_cerrada=False
         )
 
-        AuditoriaCaja.objects.create(
-            caja=caja,
-            usuario=request.user,
-            accion=AuditoriaCaja.Accion.ABRIR if hasattr(AuditoriaCaja, 'Accion') else "ABRIR",
-            detalle=f"Apertura con saldo inicial ${saldo_inicial:,.2f}"
+        messages.success(
+            request,
+            f"Caja general abierta con saldo inicial: ${saldo_inicial:,.2f}",
+            extra_tags="caja"
         )
 
-        messages.success(request, f"Caja abierta automáticamente con saldo inicial: ${saldo_inicial:,.2f}", extra_tags="caja")
-        list(messages.get_messages(request))
         return redirect('cajas_list')
 
     return render(request, 'core/caja/abrir_caja_modal.html', {
         "saldo_inicial": saldo_inicial
     })
+
 
 
 @never_cache
@@ -699,39 +763,36 @@ def abrir_caja_view(request):
 @transaction.atomic
 @require_http_methods(["GET", "POST"])
 def cerrar_caja_view(request):
-    from decimal import Decimal, ROUND_HALF_UP
 
-    empleado = Empleados.objects.filter(user=request.user).first()
-    if not empleado:
-        messages.error(request, "No tenés un Empleado asociado a tu usuario.")
-        return redirect('empleados_list')
-    caja = Cajas.objects.filter(id_empleado=empleado, caja_cerrada=False).order_by('-id_caja').first()
+    caja = Cajas.objects.filter(caja_cerrada=False).order_by('-id_caja').first()
 
     if not caja:
         messages.warning(request, "No hay ninguna caja abierta.")
         return redirect('cajas_list')
 
+    saldo_sistema = caja.saldo_sistema  # ✔ monto actual real
     if request.method == 'POST':
-        monto_fisico = Decimal(request.POST.get('monto_fisico') or "0")
-        saldo_sistema = Decimal(str(caja.saldo_sistema))  
-        diferencia = (monto_fisico - saldo_sistema).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        caja.monto_fisico = monto_fisico
-        caja.saldo_final = monto_fisico
-        caja.diferencia = diferencia
+
+        caja.monto_fisico = saldo_sistema
+        caja.saldo_final = saldo_sistema
+        caja.diferencia = 0
         caja.fecha_hora_cierre = timezone.now()
         caja.caja_cerrada = True
         caja.save()
+
         request.session["cierre_info"] = {
             "saldo_inicial": f"{caja.saldo_inicial:,.2f}",
             "saldo_final": f"{caja.saldo_final:,.2f}",
-            "diferencia": f"{caja.diferencia:,.2f}",
+            "diferencia": "0.00",
         }
 
         return redirect("cajas_list")
 
     return render(request, "core/caja/cerrar_caja_modal.html", {
-        "saldo_sistema": caja.saldo_sistema
+        "saldo_sistema": saldo_sistema
     })
+
+
 
 
 
@@ -745,27 +806,31 @@ def detalle_caja_view(request, id):
         'caja': caja,
         'movimientos': movimientos,
     })
-
-
-
-@require_POST
 @login_required
 def movimiento_create(request):
+
+    if request.method == "GET":
+        formas_pago = FormaPago.objects.filter(activo=True).order_by('nombre')
+
+        return render(request, "core/caja/movimiento_form.html", {
+            "formas_pago": formas_pago
+        })
+
+    # POST → guardar movimiento (igual que antes)
+    caja = Cajas.objects.filter(caja_cerrada=False).first()
+    if not caja:
+        return JsonResponse({"error": "No hay una caja abierta para registrar movimientos"}, status=400)
 
     empleado = Empleados.objects.filter(user=request.user).first()
     if not empleado:
         return JsonResponse({"error": "Empleado no encontrado"}, status=400)
-
-    caja_abierta = Cajas.objects.filter(id_empleado=empleado, caja_cerrada=False).first()
-    if not caja_abierta:
-        return JsonResponse({"error": "No hay una caja abierta para registrar movimientos"}, status=400)
 
     tipo = request.POST.get("tipo")
     forma_pago_id = request.POST.get("forma_pago")
     descripcion = request.POST.get("descripcion", "").strip()
 
     if tipo not in ["INGRESO", "EGRESO"]:
-        return JsonResponse({"error": "Tipo de movimiento inválido"}, status=400)
+        return JsonResponse({"error": "Tipo inválido"}, status=400)
 
     try:
         monto = Decimal(request.POST.get("monto").replace(",", "."))
@@ -779,15 +844,11 @@ def movimiento_create(request):
     except FormaPago.DoesNotExist:
         return JsonResponse({"error": "Forma de pago inválida"}, status=400)
 
-    saldo_actual = caja_abierta.saldo_sistema 
-
-    if tipo == "INGRESO":
-        nuevo_saldo = saldo_actual + monto
-    else:
-        nuevo_saldo = saldo_actual - monto
+    saldo_actual = caja.saldo_sistema  
+    nuevo_saldo = saldo_actual + monto if tipo == "INGRESO" else saldo_actual - monto
 
     movimiento = MovimientosCaja.objects.create(
-        caja=caja_abierta,
+        caja=caja,
         fecha_hora=timezone.now(),
         tipo=tipo,
         forma_pago=forma_pago,
@@ -799,7 +860,7 @@ def movimiento_create(request):
     )
 
     AuditoriaCaja.objects.create(
-        caja=caja_abierta,
+        caja=caja,
         movimiento=movimiento,
         usuario=request.user,
         accion=AuditoriaCaja.Accion.MOV_ALTA,
@@ -807,19 +868,10 @@ def movimiento_create(request):
         ip=request.META.get("REMOTE_ADDR"),
     )
 
-    return JsonResponse({
-        "success": True,
-        "mov": {
-            "id": movimiento.id,
-            "fecha_hora": movimiento.fecha_hora.strftime("%d/%m/%Y %H:%M"),
-            "tipo": movimiento.get_tipo_display(),
-            "monto": str(movimiento.monto),
-            "forma_pago": movimiento.forma_pago.nombre,
-            "descripcion": movimiento.descripcion,
-            "caja": caja_abierta.id_caja,
-            "empleado": f"{empleado.nombre} {empleado.apellido or ''}",
-        }
-    })
+    return redirect("movimientos_list")
+
+
+
 
 
 @never_cache
@@ -885,6 +937,9 @@ def empleados_list(request):
     }
     return render(request, 'core/empleados/empleados_list.html', context)
 
+
+
+from django.core.mail import send_mail
 @never_cache
 @login_required
 def empleado_create(request):
@@ -896,34 +951,67 @@ def empleado_create(request):
         form = EmpleadoForm(request.POST)
         if form.is_valid():
             empleado = form.save(commit=False)
-            nombre_usuario = empleado.email or empleado.dni
-            if not nombre_usuario:
-                messages.error(request, 'Debe ingresar un email o DNI para crear el usuario.')
+            if not empleado.email:
+                messages.error(request, 'Debe ingresar un email para crear el usuario del empleado.')
                 return render(request, 'core/empleados/empleado_form.html', {
                     'form': form,
                     'title': 'Registrar Nuevo Empleado'
                 })
+
+            nombre_usuario = empleado.email 
             password_temporal = "tinta123"
+
             user = User.objects.create_user(
                 username=nombre_usuario,
-                email=empleado.email or "",
+                email=empleado.email,
                 first_name=empleado.nombre,
                 last_name=empleado.apellido or "",
                 password=password_temporal
             )
+
             grupo, _ = Group.objects.get_or_create(name="Jefe" if empleado.rol == "Jefe" else "Empleados")
             user.groups.add(grupo)
+
             empleado.user = user
             empleado.save()
+            asunto = "Bienvenido a Tinta Negra - Acceso al Sistema"
+            mensaje = f"""
+Hola {empleado.nombre} {empleado.apellido},
+
+Tu usuario en el sistema Tinta Negra ha sido creado.
+
+Aquí están tus credenciales:
+
+Usuario (email): {empleado.email}
+Contraseña temporal: {password_temporal}
+
+Por favor inicia sesión y cambia tu contraseña.
+
+Equipo de Tinta Negra
+"""
+
+            try:
+                send_mail(
+                    asunto,
+                    mensaje,
+                    "roibarra9229@gmail.com",  
+                    [empleado.email],
+                    fail_silently=False,
+                )
+            except Exception as e:
+                print("ERROR email:", e)
+                messages.warning(request, "Empleado creado, pero NO se pudo enviar el correo.")
 
             messages.success(
                 request,
-                f'Empleado registrado. Usuario: {nombre_usuario} (contraseña: {password_temporal})'
+                f'Empleado registrado correctamente. Se envió el usuario y la contraseña a {empleado.email}.'
             )
             list(messages.get_messages(request))
             return redirect('empleados_list')
+
         else:
             messages.error(request, 'Error al registrar el empleado. Verifica los datos.')
+
     else:
         form = EmpleadoForm()
 
@@ -931,6 +1019,8 @@ def empleado_create(request):
         'form': form,
         'title': 'Registrar Nuevo Empleado'
     })
+
+
 
 @never_cache
 @login_required
@@ -1002,11 +1092,35 @@ def compras_cliente(request, pk):
 @never_cache
 @login_required
 def compras_proveedor(request, pk):
-    proveedor = get_object_or_404(Proveedor, id_proveedor=pk)
-    compras = Compras.objects.filter(id_proveedor=proveedor).order_by('-fecha_compra') if hasattr(Compras, 'fecha_compra') else Compras.objects.filter(id_proveedor=proveedor).order_by('-id_compra')
+    proveedor = get_object_or_404(Proveedores, id_proveedor=pk)
+
+    compras = (
+        Compras.objects.filter(proveedor=proveedor)
+        .order_by('-fecha')
+        .prefetch_related('detallescompra_set__insumo')
+    )
+
+    compras_info = []
+    for compra in compras:
+        detalles = compra.detallescompra_set.all()
+        total_items = sum(
+            (det.cantidad or 0) * (det.precio_unitario or 0)
+            for det in detalles
+        )
+
+        compras_info.append({
+            "compra": compra,
+            "detalles": detalles,
+            "total_items": total_items,
+        })
+
+
     return render(request, 'core/proveedores/compras_proveedor.html', {
-        'proveedor': proveedor, 'compras': compras
+        'proveedor': proveedor,
+        'compras_info': compras_info
     })
+
+
 
 from django.core.paginator import Paginator
 from django.db.models import Q
@@ -1093,66 +1207,16 @@ def presupuestos_list(request):
     })
 
 
-
 @login_required
 def presupuesto_create(request):
-    from datetime import date, timedelta
 
-    if request.method == "POST":
-        form = PresupuestoForm(request.POST)
+    presupuesto = Presupuestos.objects.create(
+        fecha_emision=timezone.now().date(),
+        estado_presupuesto="Borrador",
+        total_presupuesto=0
+    )
+    return redirect("presupuesto_edit", presupuesto.id_presupuesto)
 
-        if form.is_valid():
-            presupuesto = form.save()
-            return redirect("presupuesto_edit", presupuesto.id_presupuesto)
-
-    else:
-
-        presupuesto = Presupuestos.objects.create(
-            id_cliente=None,
-            fecha_emision=date.today(),
-            fecha_vencimiento=date.today() + timedelta(days=7),
-            subtotal=0,
-            costo_diseno=0,
-            margen_ganancia=0,
-            total_presupuesto=0,
-            estado_presupuesto="EN ESPERA",
-        )
-
-        form = PresupuestoForm(instance=presupuesto)
-
-    insumos = Insumos.objects.all().order_by("nombre")
-    productos = Productos.objects.select_related("tipo").all().order_by("nombre")
-
-    return render(request, "core/presupuestos/presupuesto_form.html", {
-        "title": "Nuevo presupuesto",
-        "form": form,
-        "presupuesto": presupuesto,
-        "insumos": insumos,
-        "productos": productos,
-    })
-
-
-@require_POST
-@login_required
-def presupuesto_set_cliente(request, presupuesto_id):
-    try:
-        presupuesto = Presupuestos.objects.get(id_presupuesto=presupuesto_id)
-    except Presupuestos.DoesNotExist:
-        return JsonResponse({"ok": False, "error": "Presupuesto no encontrado."})
-
-    id_cliente = request.POST.get("id_cliente")
-
-    if not id_cliente:
-        return JsonResponse({"ok": False, "error": "Cliente inválido."})
-
-    try:
-        cliente = Cliente.objects.get(id_cliente=id_cliente)  
-        presupuesto.id_cliente = cliente
-        presupuesto.save()
-    except Cliente.DoesNotExist:  
-        return JsonResponse({"ok": False, "error": "Cliente no existe."})
-
-    return JsonResponse({"ok": True})
 
 
 @login_required
@@ -1556,30 +1620,46 @@ def generar_pdf_presupuesto(request, pk):
     return response
 
 
-
 @login_required
+@require_POST
 def presupuesto_confirmar(request, pk):
     presupuesto = get_object_or_404(Presupuestos, id_presupuesto=pk)
+
+    if not presupuesto.id_cliente:
+        messages.error(request, "Debes seleccionar un cliente antes de confirmar el presupuesto.")
+        return redirect("presupuesto_edit", presupuesto.id_presupuesto)
+
+    trabajos_qs = presupuesto.trabajos.all()
+    if not trabajos_qs.exists():
+        messages.error(request, "Debes agregar al menos un trabajo antes de confirmar el presupuesto.")
+        return redirect("presupuesto_edit", presupuesto.id_presupuesto)
+
+    total = trabajos_qs.aggregate(s=Sum("total_trabajo"))["s"] or 0
+    presupuesto.total_presupuesto = total
     presupuesto.estado_presupuesto = "EN ESPERA"
     presupuesto.save()
-    return redirect("presupuesto_detalle", pk)
 
-
+    messages.success(request, "Presupuesto confirmado correctamente.")
+    return redirect("presupuesto_detalle", presupuesto.id_presupuesto)
 
 @login_required
 def presupuesto_edit(request, presupuesto_id):
+
     presupuesto = get_object_or_404(Presupuestos, id_presupuesto=presupuesto_id)
-    trabajos = presupuesto.trabajos.all() 
-    insumos = Insumos.objects.all().order_by("nombre")
-    productos = Productos.objects.select_related("tipo").all().order_by("nombre")
+    trabajos = presupuesto.trabajos.all()
+
+    insumos = Insumos.objects.filter(is_active=True).order_by("nombre")
+    productos = Productos.objects.select_related("tipo").order_by("nombre")
 
     if request.method == "POST":
         form = PresupuestoForm(request.POST, instance=presupuesto)
 
         if form.is_valid():
             presupuesto = form.save(commit=False)
+
             subtotal = trabajos.aggregate(total=Sum("total_trabajo"))["total"] or 0
             presupuesto.subtotal = subtotal
+
             total = subtotal
 
             if presupuesto.costo_diseno:
@@ -1587,15 +1667,16 @@ def presupuesto_edit(request, presupuesto_id):
 
             if presupuesto.margen_ganancia:
                 total = total * (1 + (presupuesto.margen_ganancia / 100))
+
             presupuesto.total_presupuesto = total
             presupuesto.save()
 
-            messages.success(request, "✅ Presupuesto actualizado exitosamente.")
-            list(messages.get_messages(request))  
+            messages.success(request, "Presupuesto actualizado exitosamente.")
+            list(messages.get_messages(request))
             return redirect("presupuesto_detalle", presupuesto.id_presupuesto)
 
         else:
-            messages.error(request, "⚠️ Error al actualizar el presupuesto.")
+            messages.error(request, "Error al actualizar el presupuesto.")
             list(messages.get_messages(request))
 
     else:
@@ -1607,8 +1688,10 @@ def presupuesto_edit(request, presupuesto_id):
         "trabajos": trabajos,
         "insumos": insumos,
         "productos": productos,
-        "title": "Editar presupuesto",
+        "title": f"Editar presupuesto #{presupuesto.id_presupuesto}",
     })
+
+
 
 from django.urls import reverse
 @login_required
@@ -1824,16 +1907,29 @@ def crear_presupuesto_borrador(request):
     return JsonResponse({"ok": True, "presupuesto_id": presupuesto.id_presupuesto})
 
 
-
 @login_required
 @require_POST
 @transaction.atomic
-def agregar_trabajo(request, presupuesto_id):   
-    try:
-        presupuesto = Presupuestos.objects.get(id_presupuesto=presupuesto_id)
-    except Presupuestos.DoesNotExist:
-        return JsonResponse({"ok": False, "error": "Presupuesto no encontrado."}, status=404)
+def agregar_trabajo(request, presupuesto_id):
 
+    from decimal import Decimal
+
+    if not presupuesto_id or presupuesto_id == "0":
+        nuevo = Presupuestos.objects.create(
+            fecha_emision=timezone.now().date(),
+            estado_presupuesto="EN ESPERA",  # 🔹 CAMBIADO: coincide con tu modelo
+            subtotal=Decimal("0.00"),
+            total_presupuesto=Decimal("0.00"),
+        )
+        presupuesto = nuevo
+        presupuesto_id = nuevo.id_presupuesto
+    else:
+        try:
+            presupuesto = Presupuestos.objects.get(id_presupuesto=presupuesto_id)
+        except Presupuestos.DoesNotExist:
+            return JsonResponse({"ok": False, "error": "Presupuesto no encontrado."}, status=404)
+
+    # Debe haber cliente antes de agregar trabajos
     if not presupuesto.id_cliente:
         return JsonResponse({
             "ok": False,
@@ -1848,21 +1944,30 @@ def agregar_trabajo(request, presupuesto_id):
     except ValueError:
         cantidad = 1
 
-    from decimal import Decimal
+    if cantidad < 1:
+        return JsonResponse({"ok": False, "error": "La cantidad debe ser mayor o igual a 1."})
+
     try:
         costo_diseno = Decimal(request.POST.get("costo_diseno_trabajo") or "0")
     except Exception:
         costo_diseno = Decimal("0")
+
+    if costo_diseno < 0:
+        return JsonResponse({"ok": False, "error": "El costo de diseño no puede ser negativo."})
 
     try:
         margen = Decimal(request.POST.get("margen_trabajo") or "0")
     except Exception:
         margen = Decimal("0")
 
+    if margen < 0:
+        return JsonResponse({"ok": False, "error": "El margen no puede ser negativo."})
+
     if not nombre:
         return JsonResponse({"ok": False, "error": "Debe ingresar un nombre para el trabajo."})
 
     insumos_json = request.POST.get("insumos_json", "[]")
+
     try:
         lista_insumos = json.loads(insumos_json)
     except json.JSONDecodeError:
@@ -1871,11 +1976,35 @@ def agregar_trabajo(request, presupuesto_id):
     if not lista_insumos:
         return JsonResponse({"ok": False, "error": "Debe agregar al menos un insumo."})
 
-    editar_id = request.POST.get("editar_id")
+    for item in lista_insumos:
+        id_insumo = item.get("id_insumo")
+        if not id_insumo:
+            continue
+
+        try:
+            insumo = Insumos.objects.get(id_insumo=id_insumo, is_active=True)
+        except Insumos.DoesNotExist:
+            return JsonResponse({
+                "ok": False,
+                "error": "Uno de los insumos no existe o está dado de baja."
+            })
+
+        try:
+            cant = Decimal(str(item.get("cantidad") or "1"))
+        except:
+            cant = Decimal("1")
+        if cant < 1:
+            return JsonResponse({"ok": False, "error": "Las cantidades de insumos deben ser ≥ 1."})
+        if cant > insumo.stock_actual:
+            return JsonResponse({
+                "ok": False,
+                "error": f"No hay stock suficiente de '{insumo.nombre}'. Disponible: {insumo.stock_actual}"
+            })
+
+    editar_id = request.POST.get("editar_trabajo_id")
     if editar_id:
         try:
-            trabajo_viejo = Trabajo.objects.get(pk=editar_id, presupuesto=presupuesto)
-            trabajo_viejo.delete()
+            Trabajo.objects.get(pk=editar_id, presupuesto=presupuesto).delete()
         except Trabajo.DoesNotExist:
             pass
 
@@ -1893,40 +2022,35 @@ def agregar_trabajo(request, presupuesto_id):
 
     subtotal_insumos = Decimal("0.00")
 
+    # Creo TrabajoInsumo para cada insumo
     for item in lista_insumos:
         id_insumo = item.get("id_insumo")
         if not id_insumo:
             continue
 
-        try:
-            insumo = Insumos.objects.get(id_insumo=id_insumo)
-        except Insumos.DoesNotExist:
-            continue
+        insumo = Insumos.objects.get(id_insumo=id_insumo)
 
         try:
             cant = Decimal(str(item.get("cantidad") or "1"))
-        except Exception:
+        except:
             cant = Decimal("1")
 
         try:
             precio_unit = Decimal(str(item.get("costo_unitario") or "0"))
-        except Exception:
+        except:
             precio_unit = Decimal("0")
 
-        try:
-            sub = Decimal(str(item.get("subtotal") or "0"))
-        except Exception:
-            sub = precio_unit * cant
+        subtotal = precio_unit * cant
 
         TrabajoInsumo.objects.create(
             trabajo=trabajo,
             insumo=insumo,
             cantidad=cant,
             precio_unitario=precio_unit,
-            subtotal=sub,
+            subtotal=subtotal,
         )
 
-        subtotal_insumos += sub
+        subtotal_insumos += subtotal
 
     costo_bruto = subtotal_insumos + costo_diseno
     precio_unitario = costo_bruto * (Decimal("1.00") + (margen / Decimal("100")))
@@ -1937,10 +2061,10 @@ def agregar_trabajo(request, presupuesto_id):
     trabajo.total_trabajo = total_trabajo
     trabajo.save()
 
-    total_presupuesto = (
+    # Recalcular total del presupuesto
+    presupuesto.total_presupuesto = (
         presupuesto.trabajos.aggregate(s=Sum("total_trabajo"))["s"] or Decimal("0.00")
     )
-    presupuesto.total_presupuesto = total_presupuesto
     presupuesto.save()
 
     tabla_html = render_to_string(
@@ -1953,7 +2077,8 @@ def agregar_trabajo(request, presupuesto_id):
         {
             "ok": True,
             "tabla": tabla_html,
-            "total": f"{total_presupuesto:.2f}",
+            "total": f"{presupuesto.total_presupuesto:.2f}",
+            "presupuesto_id": presupuesto.id_presupuesto,
         }
     )
 
@@ -2002,17 +2127,30 @@ def eliminar_trabajo(request, trabajo_id):
 @login_required
 def obtener_trabajo(request, trabajo_id):
     trabajo = get_object_or_404(Trabajo, pk=trabajo_id)
-    insumos = trabajo.insumos.values("insumo_id", "cantidad", "precio_unitario")
+
+    insumos = []
+    for ti in trabajo.insumos.all():
+        insumos.append({
+            "id_insumo": ti.insumo.id_insumo,
+            "nombre": ti.insumo.nombre,
+            "cantidad": float(ti.cantidad),
+            "precio_unitario": float(ti.precio_unitario),
+            "subtotal": float(ti.subtotal),
+        })
 
     return JsonResponse({
-        "id": trabajo.id,
-        "nombre": trabajo.nombre_trabajo,
-        "descripcion": trabajo.descripcion or "",
-        "cantidad": trabajo.cantidad,
-        "costo_diseno": float(trabajo.costo_diseno),
-        "margen": float(trabajo.margen_ganancia),
-        "insumos": list(insumos),
+        "ok": True,
+        "trabajo": {
+            "id": trabajo.id,
+            "nombre_trabajo": trabajo.nombre_trabajo,
+            "descripcion": trabajo.descripcion or "",
+            "cantidad": float(trabajo.cantidad),
+            "costo_diseno": float(trabajo.costo_diseno),
+            "margen": float(trabajo.margen_ganancia),
+            "insumos": insumos,
+        }
     })
+
 
 
 @require_POST
@@ -2023,7 +2161,6 @@ def duplicar_trabajo(request, trabajo_id):
         return JsonResponse({"ok": False, "error": "Trabajo no encontrado."}, status=404)
 
     presupuesto = trabajo.presupuesto
-
     nuevo_trabajo = Trabajo.objects.create(
         presupuesto=presupuesto,
         nombre_trabajo=f"{trabajo.nombre_trabajo} (copia)",
@@ -2036,7 +2173,7 @@ def duplicar_trabajo(request, trabajo_id):
         total_trabajo=trabajo.total_trabajo,
     )
 
-    for ti in trabajo.insumos.all():
+    for ti in trabajo.insumos.filter(insumo__is_active=True):
         TrabajoInsumo.objects.create(
             trabajo=nuevo_trabajo,
             insumo=ti.insumo,
@@ -2067,6 +2204,7 @@ def duplicar_trabajo(request, trabajo_id):
     )
 
 
+
 @login_required
 def obtener_producto(request, producto_id):
     from core.models import Productos
@@ -2095,23 +2233,29 @@ def presupuesto_aprobar(request, id):
 
 
 
+from django.core.paginator import Paginator
+
 @never_cache
 @login_required
-@permission_required('core.view_productos', raise_exception=True)
 def productos_list(request):
     query = request.GET.get("q", "")
-    productos = Productos.objects.select_related("tipo").all().order_by("nombre")
+
+    productos = Productos.objects.all().order_by("id_producto")
 
     if query:
         productos = productos.filter(
             Q(nombre__icontains=query) |
             Q(descripcion__icontains=query)
         )
+    paginator = Paginator(productos, 15)
+    page = request.GET.get("page")
+    productos_page = paginator.get_page(page)
 
     return render(request, "core/productos/productos_list.html", {
-        "productos": productos,
+        "productos": productos_page,
         "query": query,
     })
+
 
 
 @never_cache
@@ -2269,11 +2413,31 @@ def producto_delete(request, id_producto):
 @require_POST
 @transaction.atomic
 def agregar_producto_presupuesto(request, presupuesto_id):
-    presupuesto = get_object_or_404(Presupuestos, pk=presupuesto_id)
+
+    from decimal import Decimal
+    from core.models import Productos, ProductosInsumos, Trabajo, TrabajoInsumo
+
+    if not presupuesto_id or presupuesto_id == "0":
+        nuevo = Presupuestos.objects.create(
+            fecha_emision=timezone.now().date(),
+            estado="Borrador",
+            total_presupuesto=Decimal("0.00"),
+            subtotal=Decimal("0.00")
+        )
+        presupuesto = nuevo
+        presupuesto_id = nuevo.id_presupuesto
+    else:
+        presupuesto = get_object_or_404(Presupuestos, pk=presupuesto_id)
+
+    if not presupuesto.id_cliente:
+        return JsonResponse({
+            "ok": False,
+            "error": "Debe seleccionar un cliente antes de agregar productos."
+        })
+
+
     producto_id = request.POST.get("id_producto")
     cantidad = int(request.POST.get("cantidad", 1))
-
-    from core.models import Productos, ProductosInsumos, Trabajo, TrabajoInsumo
 
     producto = get_object_or_404(Productos, pk=producto_id)
 
@@ -2283,13 +2447,13 @@ def agregar_producto_presupuesto(request, presupuesto_id):
         descripcion=producto.descripcion or "",
         cantidad=cantidad,
         costo_diseno=0,          
-        margen_ganancia=0,        
+        margen_ganancia=0,
     )
 
     tipo_producto = producto.tipo.nombre_tipo.strip().lower()
 
     subtotal_insumos = 0
-    subtotal_costo_real = 0          
+    subtotal_costo_real = 0
     total_venta = float(producto.precio) * cantidad
 
     if tipo_producto == "personalizado":
@@ -2301,7 +2465,7 @@ def agregar_producto_presupuesto(request, presupuesto_id):
             subtotal = precio_unit_insumo * cant_insumo
 
             subtotal_insumos += subtotal
-            subtotal_costo_real += subtotal 
+            subtotal_costo_real += subtotal
 
             TrabajoInsumo.objects.create(
                 trabajo=trabajo,
@@ -2310,11 +2474,10 @@ def agregar_producto_presupuesto(request, presupuesto_id):
                 precio_unitario=precio_unit_insumo,
                 subtotal=subtotal,
             )
-
     else:
         costo_real = float(producto.costo_inicial or 0)
         subtotal_costo_real = costo_real * cantidad
-        subtotal_insumos = 0  
+        subtotal_insumos = 0
 
     trabajo.subtotal_insumos = round(subtotal_insumos, 2)
     trabajo.precio_unitario = round(float(producto.precio), 2)
@@ -2331,21 +2494,26 @@ def agregar_producto_presupuesto(request, presupuesto_id):
         {"presupuesto": presupuesto}
     )
 
-    return JsonResponse({"ok": True, "tabla": html, "total": tot})
+    return JsonResponse({
+        "ok": True,
+        "tabla": html,
+        "total": f"{tot:.2f}",
+        "presupuesto_id": presupuesto.id_presupuesto  
+    })
 
 
 
 
 
-from django.http import JsonResponse
-from django.db.models.functions import TruncDay, TruncMonth, TruncYear
-from django.db.models import Sum
-from core.models import Pedidos
-from datetime import datetime
 
 def api_grafico_ventas(request):
 
     ESTADO_VENTA = 3
+
+    def safe_label(periodo, formato):
+        if periodo is None:
+            return "N/D"
+        return periodo.strftime(formato)
 
     mes = request.GET.get("mes")
     if mes:
@@ -2366,13 +2534,14 @@ def api_grafico_ventas(request):
                 .order_by("periodo")
             )
 
-            labels = [q["periodo"].strftime("%d/%m") for q in qs]
+            labels = [safe_label(q["periodo"], "%d/%m") for q in qs]
             valores = [q["total"] or 0 for q in qs]
 
             return JsonResponse({"labels": labels, "valores": valores})
 
         except:
-            pass  
+            pass
+
     filtro = request.GET.get("filtro", "mensual")
 
     if filtro == "diario":
@@ -2383,7 +2552,7 @@ def api_grafico_ventas(request):
             .annotate(total=Sum("total_pedido"))
             .order_by("periodo")
         )
-        labels = [q["periodo"].strftime("%d/%m/%Y") for q in qs]
+        labels = [safe_label(q["periodo"], "%d/%m/%Y") for q in qs]
 
     elif filtro == "anual":
         qs = (
@@ -2393,7 +2562,7 @@ def api_grafico_ventas(request):
             .annotate(total=Sum("total_pedido"))
             .order_by("periodo")
         )
-        labels = [q["periodo"].strftime("%Y") for q in qs]
+        labels = [safe_label(q["periodo"], "%Y") for q in qs]
 
     else:  
         qs = (
@@ -2403,11 +2572,11 @@ def api_grafico_ventas(request):
             .annotate(total=Sum("total_pedido"))
             .order_by("periodo")
         )
-        labels = [q["periodo"].strftime("%m/%Y") for q in qs]
+        labels = [safe_label(q["periodo"], "%m/%Y") for q in qs]
+
     valores = [q["total"] or 0 for q in qs]
 
     return JsonResponse({"labels": labels, "valores": valores})
-
 
 
 
@@ -2415,7 +2584,7 @@ def api_grafico_ventas(request):
 def movimientos_list(request):
     empleado = Empleados.objects.filter(user=request.user).first()
 
-    formas_pago = FormaPago.objects.all().order_by('nombre')
+    formas_pago = FormaPago.objects.filter(activo=True).order_by('nombre')
     q = request.GET.get("q", "")
     fecha_desde = request.GET.get("desde", "")
     fecha_hasta = request.GET.get("hasta", "")
@@ -2509,7 +2678,7 @@ from reportlab.lib.units import inch
 from django.http import HttpResponse
 from django.db.models.functions import TruncMonth, TruncDay, TruncYear
 from django.db.models import Sum
-from datetime import datetime
+from datetime import date
 from django.contrib.auth.decorators import login_required
 from core.models import Pedidos
 from django.templatetags.static import static
@@ -2605,6 +2774,7 @@ def render_pdf(template_src, context_dict={}):
 
     return result.getvalue()
 
+
 @login_required
 @transaction.atomic
 def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
@@ -2624,12 +2794,17 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
         StockMovimientos,
         PedidosInsumos,
         PedidosProductos,
-        ProductosInsumos
+        ProductosInsumos,
+        MovimientosCaja,
+        Cajas,
+        Empleados,
+        FormaPago
     )
 
     if nuevo_estado == "ENTREGADO":
 
         if not pedido.stock_descontado:
+
             detalles = pedido.detalles.all()
             productos_pedido = PedidosProductos.objects.filter(id_pedido=pedido)
 
@@ -2637,6 +2812,7 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
                 insumo = det.insumo
                 factor = Decimal(insumo.factor_conversion or 1)
                 cantidad_real = Decimal(det.cantidad) / factor
+
                 insumo.stock_actual -= cantidad_real
                 if insumo.stock_actual < 0:
                     insumo.stock_actual = Decimal("0")
@@ -2652,6 +2828,7 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
             for item in productos_pedido:
                 producto = item.id_producto
                 if producto.tipo and producto.tipo.nombre_tipo.upper() == "TERCERIZADO":
+
                     producto.stock_actual -= Decimal(item.cantidad)
                     if producto.stock_actual < 0:
                         producto.stock_actual = Decimal("0")
@@ -2682,6 +2859,35 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
 
             pedido.stock_descontado = True
 
+        try:
+            caja_abierta = Cajas.objects.filter(caja_cerrada=False).latest("id_caja")
+        except Cajas.DoesNotExist:
+            return JsonResponse({
+                "error": "No hay caja abierta para registrar el cobro."
+            }, status=400)
+
+        empleado = Empleados.objects.filter(user=request.user).first()
+
+        monto_cobrado = pedido.total_pedido or 0
+        forma_pago = getattr(pedido, "forma_pago", None)
+        if not forma_pago:
+            forma_pago = FormaPago.objects.first()
+
+        saldo_anterior = caja_abierta.saldo_sistema
+        saldo_nuevo = saldo_anterior + monto_cobrado
+
+        MovimientosCaja.objects.create(
+            caja=caja_abierta,
+            tipo=MovimientosCaja.Tipo.INGRESO,
+            forma_pago=forma_pago,
+            monto=monto_cobrado,
+            descripcion=f"Cobro de Pedido #{pedido.id_pedido}",
+            origen=MovimientosCaja.Origen.VENTA,
+            referencia_id=pedido.id_pedido,
+            creado_por=empleado,
+            saldo_resultante=saldo_nuevo
+        )
+
         pedido.id_estado = estado
         pedido.fecha_entrega_real = timezone.now().date()
         pedido.save()
@@ -2689,7 +2895,9 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
         return JsonResponse({
             "success": True,
             "nuevo_estado": estado.nombre_estado,
-            "fecha_entrega_real": pedido.fecha_entrega_real.strftime("%d/%m/%Y")
+            "fecha_entrega_real": pedido.fecha_entrega_real.strftime("%d/%m/%Y"),
+            "monto": float(monto_cobrado),
+            "cobro_registrado": True
         })
 
     if nuevo_estado == "EN PRODUCCIÓN":
@@ -2723,6 +2931,7 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
             for item in productos_pedido:
                 producto = item.id_producto
                 if producto.tipo and producto.tipo.nombre_tipo.upper() == "PERSONALIZADO":
+
                     receta = ProductosInsumos.objects.filter(producto=producto)
 
                     for pi in receta:
@@ -2754,6 +2963,7 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
 
             detalles = pedido.detalles.all()
             productos_pedido = PedidosProductos.objects.filter(id_pedido=pedido)
+
             for det in detalles:
                 insumo = det.insumo
                 factor = Decimal(insumo.factor_conversion or 1)
@@ -2778,6 +2988,7 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
             for item in productos_pedido:
                 producto = item.id_producto
                 if producto.tipo and producto.tipo.nombre_tipo.upper() == "PERSONALIZADO":
+
                     receta = ProductosInsumos.objects.filter(producto=producto)
 
                     for pi in receta:
@@ -2806,6 +3017,7 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
             "stock_devuelto": True
         })
 
+
     pedido.id_estado = estado
     pedido.save()
 
@@ -2813,6 +3025,7 @@ def pedido_cambiar_estado(request, id_pedido, nuevo_estado):
         "success": True,
         "nuevo_estado": estado.nombre_estado
     })
+
 
 
 @login_required
@@ -2824,3 +3037,63 @@ def cliente_pedidos(request, pk):
         "cliente": cliente,
         "pedidos": pedidos,
     })
+
+
+@login_required
+@permission_required('core.change_insumos', raise_exception=True)
+def insumo_baja(request, pk):
+    insumo = get_object_or_404(Insumos, pk=pk)
+    insumo.is_active = False
+    insumo.save()
+    messages.warning(request, f"El insumo '{insumo.nombre}' fue dado de baja.")
+    return redirect('insumos_list')
+
+
+@never_cache
+@login_required
+@permission_required('core.change_insumos', raise_exception=True)
+def insumo_reactivar(request, pk):
+    insumo = get_object_or_404(Insumos, pk=pk)
+
+    if request.method == 'POST':
+        insumo.is_active = True
+        insumo.save()
+        messages.success(
+            request,
+            f"Insumo '{insumo.nombre}' reactivado correctamente."
+        )
+        list(messages.get_messages(request))
+        return redirect('insumos_list')
+
+    return redirect('insumos_list')
+
+@login_required
+@require_POST
+@transaction.atomic
+def set_cliente_presupuesto(request, presupuesto_id):
+
+    id_cliente = request.POST.get("id_cliente")
+    if not id_cliente:
+        return JsonResponse({"ok": False, "error": "Cliente no recibido."})
+
+    if not presupuesto_id or presupuesto_id == "0":
+        presupuesto = Presupuestos.objects.create(
+            id_cliente_id=id_cliente,
+            fecha_emision=timezone.now().date(),
+            subtotal=0,
+            total_presupuesto=0,
+            estado_presupuesto="EN ESPERA",
+        )
+        return JsonResponse({"ok": True, "presupuesto_id": presupuesto.id_presupuesto})
+
+    try:
+        presupuesto = Presupuestos.objects.get(id_presupuesto=presupuesto_id)
+    except Presupuestos.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "Presupuesto no encontrado."})
+
+    presupuesto.id_cliente_id = id_cliente
+    presupuesto.save()
+
+    return JsonResponse({"ok": True, "presupuesto_id": presupuesto.id_presupuesto})
+
+

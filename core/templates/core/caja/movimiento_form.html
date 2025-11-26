@@ -1,0 +1,36 @@
+{% extends 'core/base.html' %}
+{% block title %}Nuevo Movimiento{% endblock %}
+
+{% block content %}
+<div class="card p-4" style="background:#1f1f1f; border:1px solid #333;">
+
+    <h3 class="text-white mb-3">Registrar Movimiento</h3>
+
+    <form method="POST" action="{% url 'movimiento_create' %}">
+        {% csrf_token %}
+
+        <label class="form-label text-white">Tipo</label>
+        <select name="tipo" class="form-select mb-3">
+            <option value="INGRESO">Ingreso</option>
+            <option value="EGRESO">Egreso</option>
+        </select>
+
+        <label class="form-label text-white">Monto</label>
+        <input type="number" name="monto" class="form-control mb-3" step="0.01" required>
+
+        <label class="form-label text-white">Forma de Pago</label>
+        <select name="forma_pago" class="form-select mb-3" required>
+            {% for fp in formas_pago %}
+            <option value="{{ fp.id_forma }}">{{ fp.nombre }}</option>
+            {% endfor %}
+        </select>
+
+        <label class="form-label text-white">Descripción</label>
+        <textarea name="descripcion" class="form-control mb-3"></textarea>
+
+        <button class="btn btn-success">Guardar</button>
+        <a href="{% url 'movimientos_list' %}" class="btn btn-secondary">Volver</a>
+    </form>
+
+</div>
+{% endblock %}

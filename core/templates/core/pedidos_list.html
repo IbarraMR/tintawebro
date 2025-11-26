@@ -4,41 +4,42 @@
 {% block title %}Pedidos{% endblock %}
 
 {% block content %}
-
 {% include "core/partials/toasts.html" %}
 
-<h2 class="mb-4 text-white">Pedidos</h2>
+<!-- TÍTULO Y BOTÓN NUEVO -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="text-white">Pedidos</h2>
 
-<form method="GET" class="d-flex mb-3" role="search">
-    <input type="text" name="q" class="form-control me-2"
-           placeholder="Buscar por ID de pedido, nombre o apellido..."
-           value="{{ q }}">
-    <button class="btn btn-primary" type="submit">Buscar</button>
-    
-    {% if q %}
-        <a href="{% url 'pedidos_list' %}" class="btn btn-secondary ms-2">Limpiar</a>
-    {% endif %}
+    <a href="{% url 'presupuesto_create' %}" class="btn btn-success">
+        <i class="fas fa-plus me-2"></i> Nuevo Pedido
+    </a>
+</div>
+
+<!-- BUSCADOR -->
+<form method="GET" class="mb-3">
+    <div class="input-group">
+        <input type="text" name="q" class="form-control" placeholder="Buscar por ID de pedido, nombre o apellido..."
+               value="{{ q }}">
+        <button class="btn btn-primary" type="submit">Buscar</button>
+        <a href="{% url 'pedidos_list' %}" class="btn btn-secondary">Limpiar</a>
+    </div>
 </form>
 
-<!-- 🔥 FILTRO NUEVO: SOLO EN PRODUCCIÓN -->
+<!-- FILTROS -->
 <div class="d-flex gap-2 mb-3">
-    <a href="{% url 'pedidos_list' %}" class="btn btn-outline-light btn-sm">
+    <a href="{% url 'pedidos_list' %}"
+       class="btn btn-outline-light btn-sm {% if not produccion %} active {% endif %}">
         Todos
     </a>
 
-    <a href="?produccion=1" class="btn btn-outline-warning btn-sm">
+    <a href="?produccion=1"
+       class="btn btn-outline-warning btn-sm {% if produccion %} active {% endif %}">
         En producción
     </a>
 </div>
 
-<div class="card p-4" style="background-color: #1f1f1f; border: 1px solid #333333;">
-
-    <div class="d-flex justify-content-end mb-4">
-        <a href="{% url 'presupuesto_create' %}" class="btn btn-custom">
-            <i class="fas fa-plus me-1"></i> Nuevo Pedido
-        </a>
-    </div>
-
+<!-- TABLA -->
+<div class="card p-4" style="background-color: #1f1f1f; border: 1px solid #333;">
     <div class="table-responsive">
         <table class="table table-dark table-hover align-middle mb-0">
             <thead>
@@ -54,6 +55,7 @@
             <tbody>
                 {% for pedido in pedidos %}
                 <tr class="text-center">
+
                     <td>{{ pedido.id_pedido }}</td>
 
                     <td>{{ pedido.id_cliente.nombre }} {{ pedido.id_cliente.apellido }}</td>
@@ -70,7 +72,8 @@
                         </span>
                     </td>
 
-                    <td>
+                    <td class="text-center">
+
                         {% if pedido.id_estado.nombre_estado == "EN PRODUCCIÓN" %}
                             <button class="btn btn-success btn-sm btn-estado"
                                     data-id="{{ pedido.id_pedido }}"
@@ -91,8 +94,8 @@
                                 Editar
                             </button>
                         {% endif %}
-                    </td>
 
+                    </td>
                 </tr>
                 {% empty %}
                 <tr>
@@ -104,6 +107,7 @@
             </tbody>
         </table>
 
+        <!-- PAGINACIÓN -->
         <nav aria-label="Paginación de pedidos" class="mt-3">
             <ul class="pagination justify-content-center">
 
@@ -131,10 +135,10 @@
 
             </ul>
         </nav>
-
     </div>
 </div>
 
+<!-- JS PARA CAMBIO DE ESTADO -->
 <script>
 document.addEventListener("DOMContentLoaded", () => {
 
@@ -166,7 +170,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (estado === "CANCELADO") badge.classList.add("bg-danger");
                     if (estado === "EN PRODUCCIÓN") badge.classList.add("bg-warning", "text-dark");
 
-                    setTimeout(() => location.reload(), 300);
+                    setTimeout(() => location.reload(), 200);
                 }
             });
         });

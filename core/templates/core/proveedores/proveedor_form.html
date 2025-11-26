@@ -1,71 +1,50 @@
 {% extends 'core/base.html' %}
 {% load static %}
 
-{% block title %}Registrar Proveedor{% endblock %}
+{% block title %}{{ title }}{% endblock %}
 
 {% block content %}
-    {% include "core/partials/toasts.html" %}
+{% include "core/partials/toasts.html" %}
+
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="text-white">Registrar Nuevo Proveedor</h2>
+    <h2 class="text-white">{{ title }}</h2>
+
     <a href="{% url 'proveedores_list' %}" class="btn btn-secondary">
         <i class="fas fa-arrow-left me-2"></i> Volver al Listado
     </a>
 </div>
 
-<div class="card p-4" style="background-color: #1f1f1f; border: 1px solid #333333;">
+<div class="card p-4" style="background-color:#1f1f1f; border:1px solid #333;">
     <form method="post" novalidate>
         {% csrf_token %}
-        
+
         {% if form.errors %}
         <div class="alert alert-danger">
-            Todos los campos son obligatorios
+            Verifica los datos ingresados.
         </div>
         {% endif %}
 
+        {% for field in form %}
         <div class="mb-3">
-            <label for="id_nombre" class="form-label text-white">Nombre <span class="text-danger">*</span></label>
-            <input type="text" name="nombre" class="form-control" id="id_nombre" required>
+            <label class="form-label text-white">{{ field.label }} <span class="text-danger">*</span></label>
+            {{ field }}
+            {% if field.errors %}
+                <div class="text-danger small">{{ field.errors|striptags }}</div>
+            {% endif %}
         </div>
+        {% endfor %}
 
-        <div class="mb-3">
-            <label for="id_cuit" class="form-label text-white">CUIT <span class="text-danger">*</span></label>
-            <input type="text" name="cuit" class="form-control" id="id_cuit" required>
+        <div class="d-flex gap-2 mt-3">
+            <button type="submit" class="btn btn-success">
+                <i class="fas fa-save me-2"></i>
+                {% if is_create %}Guardar Proveedor{% else %}Actualizar Proveedor{% endif %}
+            </button>
+
+            <a href="{% url 'proveedores_list' %}" class="btn btn-secondary">
+                <i class="fas fa-times me-2"></i> Cancelar
+            </a>
         </div>
-
-        <div class="mb-3">
-            <label for="id_razon_social" class="form-label text-white">Razón Social <span class="text-danger">*</span></label>
-            <input type="text" name="razon_social" class="form-control" id="id_razon_social" required>
-        </div>
-
-        <div class="mb-3">
-            <label for="id_telefono" class="form-label text-white">Teléfono <span class="text-danger">*</span></label>
-            <input type="text" name="telefono" class="form-control" id="id_telefono" required>
-        </div>
-
-        <div class="mb-3">
-            <label for="id_email" class="form-label text-white">Email <span class="text-danger">*</span></label>
-            <input type="email" name="email" class="form-control" id="id_email" required>
-        </div>
-
-        <div class="mb-3">
-            <label for="id_direccion" class="form-label text-white">Dirección <span class="text-danger">*</span></label>
-            <input type="text" name="direccion" class="form-control" id="id_direccion" required>
-        </div>
-
-        <div class="mb-3">
-            <label for="id_persona_contacto" class="form-label text-white">Persona de Contacto <span class="text-danger">*</span></label>
-            <input type="text" name="persona_contacto" class="form-control" id="id_persona_contacto" required>
-        </div>
-
-<div class="d-flex gap-2 mt-3">
-                <button type="submit" class="btn btn-success">
-                    <i class="fas fa-save me-2"></i> Guardar Proveedor
-                </button>
-                
-                <a href="{% url 'proveedores_list' %}" class="btn btn-secondary">
-                    <i class="fas fa-times me-2"></i> Cancelar
-                </a>
-            </div>
     </form>
 </div>
+
 {% endblock %}

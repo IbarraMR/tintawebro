@@ -1,17 +1,43 @@
 {% extends 'core/base.html' %}
+{% load static %}
+
 {% block title %}Cerrar Caja{% endblock %}
+
 {% block content %}
 <div class="container mt-4 text-white">
-  <h3 class="mb-3">Cerrar Caja</h3>
-  <p>Saldo del sistema actual: <strong>${{ saldo_sistema }}</strong></p>
-  <form method="post" action="{% url 'cerrar_caja' %}">
-    {% csrf_token %}
-    <div class="mb-3">
-      <label for="monto_fisico" class="form-label">Monto contado en caja</label>
-      <input type="number" step="0.01" class="form-control" id="monto_fisico" name="monto_fisico" required>
+
+    <h2 class="mb-4">💵 Cierre de Caja</h2>
+
+    <div class="card p-4 bg-dark" style="border:1px solid #2b2b2b;">
+
+        <label class="form-label text-secondary fw-bold">Saldo calculado por el sistema</label>
+        <input type="text"
+               class="form-control mb-4"
+               value="${{ saldo_sistema|floatformat:2 }}"
+               readonly
+               style="background:#111; color:#00ff88; font-weight:bold; border:1px solid #333;">
+
+        <form method="POST">
+            {% csrf_token %}
+
+            <label for="monto_fisico" class="form-label text-secondary fw-bold">Monto físico contado</label>
+            <input type="number"
+                   step="0.01"
+                   min="0"
+                   name="monto_fisico"
+                   id="monto_fisico"
+                   class="form-control mb-4"
+                   value="{{ saldo_sistema|floatformat:2 }}"
+                   required
+                   style="background:#111; color:white; border:1px solid #333;">
+
+            <button type="submit"
+                    class="btn btn-danger w-100 py-2 fw-bold"
+                    style="font-size:1.1rem;">
+                Cerrar Caja
+            </button>
+
+        </form>
     </div>
-    <button type="submit" class="btn btn-danger">Cerrar Caja</button>
-    <a href="{% url 'cajas_list' %}" class="btn btn-secondary ms-2">Cancelar</a>
-  </form>
 </div>
 {% endblock %}

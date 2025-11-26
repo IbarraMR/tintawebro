@@ -5,9 +5,18 @@ from django.conf import settings
 from django.core.validators import RegexValidator, EmailValidator
 
 
+
 class Cajas(models.Model):
     id_caja = models.AutoField(primary_key=True)
-    id_empleado = models.ForeignKey("Empleados", on_delete=models.PROTECT)
+
+    id_empleado = models.ForeignKey(
+        "Empleados",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+
     fecha_hora_apertura = models.DateTimeField(auto_now_add=True)
     fecha_hora_cierre = models.DateTimeField(blank=True, null=True)
     saldo_inicial = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -31,6 +40,7 @@ class Cajas(models.Model):
         ingresos = sum(x["m"] for x in movs if x["tipo"] == MovimientosCaja.Tipo.INGRESO) or 0
         egresos = sum(x["m"] for x in movs if x["tipo"] == MovimientosCaja.Tipo.EGRESO) or 0
         return (self.saldo_inicial + ingresos - egresos)
+
 
 
 class FormaPago(models.Model):
@@ -159,6 +169,7 @@ class Insumos(models.Model):
     stock_minimo = models.IntegerField(blank=True, null=True)
     precio_costo_unitario = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     proveedor = models.ForeignKey("Proveedores", on_delete=models.PROTECT, null=True, blank=False)
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         db_table = "insumos"

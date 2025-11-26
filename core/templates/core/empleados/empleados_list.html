@@ -4,6 +4,7 @@
 {% block title %}Empleados | Listado{% endblock %}
 
 {% block content %}
+
 {% include "core/partials/toasts.html" %}
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -18,34 +19,27 @@
     {% endif %}
 </div>
 
-<form method="get" class="d-flex gap-2 mb-4">
-    <input type="text"
-           name="q"
-           class="form-control"
-           placeholder="Buscar por nombre, apellido, DNI, teléfono o rol..."
-           value="{{ request.GET.q|default:'' }}">
+<form method="get" class="mb-3">
+    <div class="input-group">
+        <input type="text"
+               name="q"
+               class="form-control"
+               placeholder="Buscar por nombre, apellido, DNI, teléfono o rol..."
+               value="{{ request.GET.q|default:'' }}">
 
-    <button type="submit" class="btn btn-primary">Buscar</button>
+        <button type="submit" class="btn btn-primary">Buscar</button>
 
-    {% if request.GET.q %}
-        <a href="{% url 'empleados_list' %}" class="btn btn-secondary">Limpiar</a>
-    {% endif %}
-</form>
-
-{% if messages %}
-  {% for message in messages %}
-    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-      {{ message }}
-      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        {% if request.GET.q %}
+            <a href="{% url 'empleados_list' %}" class="btn btn-secondary">Limpiar</a>
+        {% endif %}
     </div>
-  {% endfor %}
-{% endif %}
+</form>
 
 <div class="card p-4" style="background-color:#1f1f1f; border:1px solid #333;">
 
     {% if empleados %}
     <div class="table-responsive">
-        <table class="table table-dark table-hover mb-0">
+        <table class="table table-dark table-hover align-middle mb-0 text-center">
             <thead>
                 <tr>
                     <th>ID</th>
@@ -55,9 +49,10 @@
                     <th>Email</th>
                     <th>Rol</th>
                     <th>Estado</th>
-                    <th class="text-center">Acciones</th>
+                    <th>Acciones</th>
                 </tr>
             </thead>
+
             <tbody>
                 {% for empleado in empleados %}
                 <tr>
@@ -68,49 +63,56 @@
                     <td>{{ empleado.email|default_if_none:"N/A" }}</td>
                     <td>{{ empleado.rol|default_if_none:"N/A" }}</td>
 
-                    {% if empleado.is_active %}
-                        <td><span class="badge bg-success">Activo</span></td>
-                    {% else %}
-                        <td><span class="badge bg-secondary">Inactivo</span></td>
-                    {% endif %}
-
-                    <td class="text-center">
+                    <td>
                         {% if empleado.is_active %}
-
-                            {% if perms.core.change_empleados %}
-                            <a href="{% url 'empleado_edit' pk=empleado.id_empleado %}"
-                               class="btn btn-sm btn-info me-2" title="Editar">
-                                <i class="fas fa-edit"></i>
-                            </a>
-                            {% endif %}
-
-                            {% if perms.core.change_empleados %}
-                            <a href="{% url 'empleado_baja' pk=empleado.id_empleado %}"
-                               class="btn btn-sm btn-warning" title="Dar de baja">
-                                <i class="fas fa-user-slash"></i>
-                            </a>
-                            {% endif %}
-
+                            <span class="badge bg-success">Activo</span>
                         {% else %}
-
-                            {% if perms.core.change_empleados %}
-                            <a href="{% url 'empleado_reactivar' pk=empleado.id_empleado %}"
-                               class="btn btn-sm btn-success" title="Reactivar">
-                                <i class="fas fa-user-check"></i>
-                            </a>
-                            {% endif %}
-
+                            <span class="badge bg-secondary">Inactivo</span>
                         {% endif %}
                     </td>
 
+                    <td>
+                        <div class="d-flex justify-content-center gap-2">
+
+                            {% if empleado.is_active %}
+
+                                {% if perms.core.change_empleados %}
+                                <a href="{% url 'empleado_edit' pk=empleado.id_empleado %}"
+                                   class="btn btn-sm btn-info" title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                {% endif %}
+
+                                {% if perms.core.change_empleados %}
+                                <a href="{% url 'empleado_baja' pk=empleado.id_empleado %}"
+                                   class="btn btn-sm btn-warning" title="Dar de baja">
+                                    <i class="fas fa-user-slash"></i>
+                                </a>
+                                {% endif %}
+
+                            {% else %}
+
+                                {% if perms.core.change_empleados %}
+                                <a href="{% url 'empleado_reactivar' pk=empleado.id_empleado %}"
+                                   class="btn btn-sm btn-success" title="Reactivar">
+                                    <i class="fas fa-user-check"></i>
+                                </a>
+                                {% endif %}
+
+                            {% endif %}
+                        </div>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
+
         </table>
     </div>
 
     {% else %}
-        <div class="alert alert-info text-center">No se encontraron empleados registrados.</div>
+        <div class="alert alert-info text-center mt-3">
+            No se encontraron empleados registrados.
+        </div>
     {% endif %}
 
 </div>

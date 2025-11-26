@@ -1,42 +1,63 @@
-<script>
-document.addEventListener("DOMContentLoaded", () => {
+{% load widget_tweaks %}
 
-    const btnProv = document.getElementById("btnGuardarProveedor");
+<div class="modal fade" id="proveedorModal" tabindex="-1" aria-labelledby="proveedorModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content bg-dark text-white">
 
-    btnProv.addEventListener("click", () => {
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title" id="proveedorModalLabel">Registrar Nuevo Proveedor</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
 
-        const form = document.getElementById("proveedorFormModal");
-        const datos = new FormData(form);
+      <form id="proveedorFormModal" method="post" action="{% url 'proveedor_create_ajax' %}">
+        <div class="modal-body">
+          {% csrf_token %}
 
-        fetch("{% url 'proveedor_create_ajax' %}", {
-            method: "POST",
-            headers: {
-                "X-Requested-With": "XMLHttpRequest"
-            },
-            body: datos
-        })
-        .then(r => r.json())
-        .then(data => {
+          <div class="mb-2">
+            <label class="form-label">Nombre comercial *</label>
+            <input type="text" name="nombre" class="form-control" required>
+          </div>
 
-            if (!data.success) {
-                alert(data.message);
-                return;
-            }
+          <div class="mb-2">
+            <label class="form-label">Razón social *</label>
+            <input type="text" name="razon_social" class="form-control" required>
+          </div>
 
-            const select = document.getElementById("id_id_proveedor");
-            if (select) {
-                const opt = document.createElement("option");
-                opt.value = data.id;
-                opt.textContent = data.nombre;
-                opt.selected = true;
-                select.appendChild(opt);
-            }
+          <div class="mb-2">
+            <label class="form-label">CUIT *</label>
+            <input type="text" name="cuit" class="form-control" required>
+          </div>
 
-            const modal = bootstrap.Modal.getInstance(document.getElementById("proveedorModal"));
-            modal.hide();
+          <div class="mb-2">
+            <label class="form-label">Teléfono *</label>
+            <input type="text" name="telefono" class="form-control" required>
+          </div>
 
-            form.reset();
-        });
-    });
-});
-</script>
+          <div class="mb-2">
+            <label class="form-label">Email *</label>
+            <input type="email" name="email" class="form-control" required>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Dirección *</label>
+            <input type="text" name="direccion" class="form-control" required>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Persona de contacto *</label>
+            <input type="text" name="persona_contacto" class="form-control" required>
+          </div>
+
+        </div>
+
+        <div class="modal-footer border-secondary">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+          <button type="submit" id="btnGuardarProveedor" class="btn btn-success">
+            Guardar proveedor
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>

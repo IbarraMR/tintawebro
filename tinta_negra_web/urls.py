@@ -24,6 +24,7 @@ from tinta_negra_web.views import (
     presupuesto_aprobar,
     presupuesto_confirmar,
     pedido_cambiar_estado,
+    obtener_trabajo,
 )
 
 
@@ -42,13 +43,14 @@ urlpatterns = [
     path('clientes/eliminar/<int:pk>/', views.cliente_delete, name='cliente_delete'),
     path('clientes/<int:pk>/compras/', views.compras_cliente, name='compras_cliente'),
     path("clientes/<int:pk>/pedidos/", views.cliente_pedidos, name="cliente_pedidos"),
+    path('clientes/create/ajax/', views.cliente_create_ajax, name='cliente_create_ajax'),
 
     path('proveedores/', views.proveedores_list, name='proveedores_list'),
     path('proveedor/nuevo/', views.proveedor_create, name='proveedor_create'),
     path('proveedores/<int:pk>/editar/', views.proveedor_edit, name='proveedor_edit'),
-    path('proveedores/<int:pk>/baja/', views.proveedor_baja_logica, name='proveedor_baja'),
+    path('proveedores/<int:pk>/baja/', views.proveedor_baja, name='proveedor_baja'),
     path('proveedores/<int:pk>/reactivar/', views.proveedor_reactivar, name='proveedor_reactivar'),
-    path('compras/proveedor/<int:proveedor_id>/', views.compras_proveedor, name='compras_proveedor'),
+    path('compras/proveedor/<int:pk>/', views.compras_proveedor, name='compras_proveedor'),
     path('ajax/proveedor/nuevo/', proveedor_create_ajax, name='proveedor_create_ajax'),
 
     path('insumos/', views.insumos_list, name='insumos_list'),
@@ -59,6 +61,8 @@ urlpatterns = [
     path("ajax/insumo/datos/<int:pk>/", views.insumo_datos_ajax, name="insumo_datos_ajax"),
     path("ajax/insumo/editar/", views.insumo_editar_ajax, name="insumo_editar_ajax"),
     path("unidad-medida/create/ajax/", unidad_medida_create_ajax, name="unidad_medida_create_ajax"),
+    path('insumos/<int:pk>/baja/', views.insumo_baja, name='insumo_baja'),
+    path('insumos/reactivar/<int:pk>/', views.insumo_reactivar, name='insumo_reactivar'),
 
     path('compras/', views.compras_list, name='compras_list'),
     path('compras/nueva/', views.compras_create, name='compras_create'),
@@ -69,16 +73,20 @@ urlpatterns = [
     path("presupuesto/<int:pk>/detalle/", presupuesto_detalle, name="presupuesto_detalle"),
 
     path("presupuesto/<int:presupuesto_id>/agregar-insumo/", agregar_insumo_presupuesto, name="agregar_insumo_presupuesto"),
-    path("presupuesto/<int:presupuesto_id>/set-cliente/", views.presupuesto_set_cliente, name="presupuesto_set_cliente"),
-
+    path("presupuesto/<int:presupuesto_id>/set-cliente/", views.set_cliente_presupuesto, name="presupuesto_set_cliente"),
     path("presupuesto/detalle/<int:detalle_id>/eliminar/", eliminar_insumo_presupuesto, name="eliminar_insumo_presupuesto"),
     path("presupuesto/detalle/<int:detalle_id>/editar/", editar_insumo_presupuesto, name="editar_insumo_presupuesto"),
 
     path("presupuesto/borrador/crear/", views.crear_presupuesto_borrador, name="crear_presupuesto_borrador"),
+
     path("presupuesto/<int:presupuesto_id>/trabajos/agregar/", views.agregar_trabajo, name="agregar_trabajo"),
     path("presupuesto/<int:presupuesto_id>/trabajos/listar/", views.listar_trabajos, name="listar_trabajos"),
     path("trabajo/<int:trabajo_id>/eliminar/", views.eliminar_trabajo, name="eliminar_trabajo"),
     path("trabajo/<int:trabajo_id>/duplicar/", views.duplicar_trabajo, name="duplicar_trabajo"),
+
+    path("presupuesto/<int:presupuesto_id>/agregar-producto/", views.agregar_producto_presupuesto, name="agregar_producto_presupuesto"),
+
+    path("presupuesto/<int:pk>/guardar_trabajo/", guardar_trabajo, name="guardar_trabajo"),
 
     path("presupuesto/<int:pk>/pdf/", views.generar_pdf_presupuesto, name="generar_pdf_presupuesto"),
     path("presupuesto/<int:pk>/confirmar/", presupuesto_confirmar, name="presupuesto_confirmar"),
@@ -87,8 +95,6 @@ urlpatterns = [
     path("presupuesto/<int:pk>/enviar-email/", views.presupuesto_enviar_email, name="presupuesto_enviar_email"),
     path("presupuesto/<int:id>/aprobar/", presupuesto_aprobar, name="presupuesto_aprobar"),
     path("presupuesto/<int:presupuesto_id>/editar/", views.presupuesto_edit, name="presupuesto_edit"),
-    path("presupuesto/<int:presupuesto_id>/agregar-producto/", views.agregar_producto_presupuesto, name="agregar_producto_presupuesto"),
-    path("presupuesto/<int:pk>/guardar_trabajo/", guardar_trabajo, name="guardar_trabajo"),
 
     path("pedidos/", views.pedidos_list, name="pedidos_list"),
     path("presupuestos/<int:pk>/generar-pedido/", convertir_presupuesto_a_pedido, name="convertir_presupuesto_a_pedido"),
@@ -130,6 +136,7 @@ urlpatterns = [
 
     path("api/grafico/ventas/", views.api_grafico_ventas, name="api_grafico_ventas"),
     path("reportes/ventas/pdf/", views.reporte_ventas_pdf, name="reporte_ventas_pdf"),
-    path('clientes/create/ajax/', views.cliente_create_ajax, name='cliente_create_ajax'),
+    path("trabajo/<int:trabajo_id>/obtener/", obtener_trabajo, name="trabajo_obtener"),
+
 
 ]

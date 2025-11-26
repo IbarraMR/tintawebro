@@ -1,4 +1,5 @@
 {% load widget_tweaks %}
+
 <div class="modal fade" id="insumoModal" tabindex="-1" aria-labelledby="insumoModalLabel" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content bg-dark text-white">
@@ -9,8 +10,9 @@
       </div>
       
       <form id="insumoFormModal" method="post" action="{% url 'insumo_create_ajax' %}">
-      <div class="modal-body">
+        <div class="modal-body">
           {% csrf_token %}
+
           <div class="mb-2">
             <label class="form-label">Proveedor:</label>
             {{ insumo_form.proveedor|add_class:"form-select" }}
@@ -42,16 +44,15 @@
             <label class="form-label">Precio costo unitario:</label>
             {{ insumo_form.precio_costo_unitario|add_class:"form-control" }}
           </div>
-
-      </div>
+        </div>
       
-      <div class="modal-footer border-secondary">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+        <div class="modal-footer border-secondary">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
 
-        <button type="submit" id="btnGuardarInsumo" class="btn btn-primary">
-          Guardar
-        </button>
-      </div>
+          <button type="submit" id="btnGuardarInsumo" class="btn btn-primary">
+            Guardar
+          </button>
+        </div>
       </form>
 
     </div>

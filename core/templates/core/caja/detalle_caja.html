@@ -1,15 +1,18 @@
 {% extends 'core/base.html' %}
 {% block title %}Detalle de Caja{% endblock %}
+
 {% block content %}
 <div class="container mt-4 text-white">
+
     <h2>Detalle de Caja #{{ caja.id_caja }}</h2>
-    <p>Saldo inicial: ${{ caja.saldo_inicial }}</p>
-    <p>Fecha apertura: {{ caja.fecha_hora_apertura }}</p>
-    <p>Fecha cierre: {{ caja.fecha_hora_cierre|default:"-" }}</p>
-    <p><strong>Empleado:</strong> {{ caja.id_empleado.nombre }} {{ caja.id_empleado.apellido }}</p>
+
+    <p><strong>Saldo inicial:</strong> ${{ caja.saldo_inicial }}</p>
+    <p><strong>Fecha apertura:</strong> {{ caja.fecha_hora_apertura|date:"d/m/Y H:i" }}</p>
+    <p><strong>Fecha cierre:</strong> {{ caja.fecha_hora_cierre|default:"-"|date:"d/m/Y H:i" }}</p>
 
     <hr>
     <h4>Movimientos</h4>
+
     {% if movimientos %}
         <table class="table table-dark table-striped mt-3">
             <thead>
@@ -23,9 +26,9 @@
             <tbody>
                 {% for m in movimientos %}
                 <tr>
-                    <td>{{ m.fecha_hora }}</td>
-                    <td>{{ m.tipo_movimiento }}</td>
-                    <td>${{ m.monto }}</td>
+                    <td>{{ m.fecha_hora|date:"d/m/Y H:i" }}</td>
+                    <td>{{ m.get_tipo_display }}</td>
+                    <td>$ {{ m.monto }}</td>
                     <td>{{ m.descripcion }}</td>
                 </tr>
                 {% endfor %}
@@ -34,5 +37,6 @@
     {% else %}
         <p class="text-secondary mt-3">No hay movimientos registrados.</p>
     {% endif %}
+
 </div>
 {% endblock %}

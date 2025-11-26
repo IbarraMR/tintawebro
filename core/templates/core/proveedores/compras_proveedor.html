@@ -1,40 +1,75 @@
-{% extends 'core/base.html' %}
-{% block title %}Compras al proveedor {{ proveedor.nombre }}{% endblock %}
+{% extends "core/base.html" %}
+{% load static %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="text-white">Compras al proveedor {{ proveedor.nombre }}</h2>
-    <a href="{% url 'proveedores_list' %}" class="btn btn-secondary">
-        <i class="fas fa-arrow-left me-2"></i> Volver al Listado
-    </a>
+
+<h2 class="text-white mb-3">Compras al proveedor {{ proveedor.nombre }}</h2>
+
+<div class="accordion" id="accordionCompras">
+
+    {% for item in compras_info %}
+    <div class="accordion-item bg-dark text-white border-secondary">
+        <h2 class="accordion-header">
+            <button class="accordion-button collapsed bg-secondary text-white" 
+                    type="button" data-bs-toggle="collapse" 
+                    data-bs-target="#compra{{ item.compra.id_compra }}">
+
+                <strong>#{{ item.compra.id_compra }}</strong>
+                &nbsp; — {{ item.compra.fecha|date:"d/m/Y" }} — 
+                Total: ${{ item.compra.total }}
+            </button>
+        </h2>
+
+        <div id="compra{{ item.compra.id_compra }}" 
+             class="accordion-collapse collapse" 
+             data-bs-parent="#accordionCompras">
+
+            <div class="accordion-body">
+
+                <table class="table table-dark table-striped">
+                    <thead>
+                        <tr>
+                            <th>Insumo</th>
+                            <th>Cantidad</th>
+                            <th>Precio Unitario</th>
+                            <th>Subtotal</th>
+                            <th>Stock actual</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for det in item.detalles %}
+                        <tr>
+                            <td>{{ det.insumo.nombre }}</td>
+                            <td>{{ det.cantidad }}</td>
+                            <td>${{ det.precio_unitario }}</td>
+                            <td>${{ det.cantidad|floatformat:2 }} × {{ det.precio_unitario|floatformat:2 }}</td>
+                            <td>{{ det.insumo.stock_actual }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <p class="text-end mt-2 fs-6">
+                    <strong>Total insumos comprados:</strong> ${{ item.total_items }}
+                </p>
+
+                <div class="text-end mt-2">
+                    <a href="{% url 'compra_detalle' item.compra.id_compra %}" 
+                       class="btn btn-info">
+                        <i class="fas fa-eye"></i> Ver compra completa
+                    </a>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+    {% endfor %}
+
 </div>
 
-<div class="card p-4" style="background-color: #1f1f1f; border: 1px solid #333333;">
-    {% if compras %}
-    <div class="table-responsive">
-        <table class="table table-dark table-hover">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Fecha</th>
-                    <th>Total</th>
-                    <th>Forma de Pago</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for compra in compras %}
-                <tr>
-                    <td>{{ compra.id_compra }}</td>
-                    <td>{{ compra.fecha_compra|date:"d/m/Y H:i" }}</td>
-                    <td>${{ compra.total|floatformat:2 }}</td>
-                    <td>{{ compra.forma_pago|default_if_none:"N/A" }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <div class="alert alert-info text-center">No hay compras registradas para este proveedor.</div>
-    {% endif %}
-</div>
+<a href="{% url 'proveedores_list' %}" class="btn btn-secondary mt-4">
+    <i class="fas fa-arrow-left me-2"></i> Volver al Listado
+</a>
+
 {% endblock %}

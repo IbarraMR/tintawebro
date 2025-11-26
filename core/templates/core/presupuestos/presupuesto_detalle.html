@@ -35,24 +35,24 @@
             {% if presupuesto.estado_presupuesto != "CONFIRMADO" %}
             <a href="{% url 'convertir_presupuesto_a_pedido' presupuesto.id_presupuesto %}"
                class="btn btn-success">
-               ✅ Confirmar presupuesto y generar Pedido
+               Confirmar presupuesto y generar Pedido
             </a>
             {% endif %}
 
             <a href="{% url 'presupuesto_edit' presupuesto.id_presupuesto %}" class="btn btn-warning">
-                ✏️ Editar
+                Editar
             </a>
 
             <a href="{% url 'presupuesto_previa_pdf' presupuesto.id_presupuesto %}" class="btn btn-info">
-                👀 Previsualizar PDF
+                Previsualizar PDF
             </a>
 
             <a href="{% url 'generar_pdf_presupuesto' presupuesto.id_presupuesto %}" class="btn btn-light">
-                📄 Descargar PDF
+                Descargar PDF
             </a>
 
             <a href="{% url 'presupuesto_email_preview' presupuesto.id_presupuesto %}" class="btn btn-primary">
-                🟢 Enviar por email
+                Enviar por email
             </a>
         </div>
 

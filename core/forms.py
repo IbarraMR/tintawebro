@@ -23,10 +23,6 @@ from .models import (
 
 )
 from django.forms.models import inlineformset_factory
-
-# ==========================================================
-# FORM CLIENTE
-# ==========================================================
 from django import forms
 from django.core.exceptions import ValidationError
 from core.models import Cliente
@@ -53,19 +49,17 @@ class ClienteForm(forms.ModelForm):
         qs = Cliente.objects.exclude(pk=self.instance.pk)
 
         if dni and qs.filter(dni=dni).exists():
-            raise ValidationError({"dni": "⚠️ Ya existe un cliente con este DNI."})
+            raise ValidationError({"dni": "Ya existe un cliente con este DNI."})
 
         if email and qs.filter(email=email).exists():
-            raise ValidationError({"email": "⚠️ Ya existe un cliente con este email."})
+            raise ValidationError({"email": "Ya existe un cliente con este email."})
 
         if telefono and qs.filter(telefono=telefono).exists():
-            raise ValidationError({"telefono": "⚠️ Ya existe un cliente con este teléfono."})
+            raise ValidationError({"telefono": "Ya existe un cliente con este teléfono."})
 
         return cleaned_data
 
-# ==========================================================
-# FORM PROVEEDOR
-# ==========================================================
+
 class ProveedorForm(forms.ModelForm):
     class Meta:
         model = Proveedores
@@ -89,15 +83,18 @@ class ProveedorForm(forms.ModelForm):
         
 
 
-# ==========================================================
-# FORM EMPLEADOS
-# ==========================================================
+
+from django import forms
+from django.core.exceptions import ValidationError
+from datetime import date
+from .models import Empleados
+from django.core.validators import validate_email
+
 class EmpleadoForm(forms.ModelForm):
+
     ROLES = [
         ('Jefe', 'Jefe'),
         ('Empleado', 'Empleado'),
-        ('Diseñador', 'Diseñador'),
-        ('Producción', 'Producción'),
     ]
 
     rol = forms.ChoiceField(choices=ROLES, label="Rol")
@@ -106,28 +103,72 @@ class EmpleadoForm(forms.ModelForm):
         model = Empleados
         fields = '__all__'
         widgets = {
-            'fecha_nacimiento': forms.DateInput(attrs={'type': 'date'}),
+            'fecha_nacimiento': forms.DateInput(
+                attrs={'type': 'date', 'min': '1900-01-01', 'max': '2004-12-31'}
+            ),
+            'dni': forms.TextInput(attrs={'pattern': '[0-9]+', 'title': 'Solo números'}),
+            'telefono': forms.TextInput(attrs={'pattern': '[0-9]+', 'title': 'Solo números'}),
+            'email': forms.EmailInput(),
         }
 
+    def clean_dni(self):
+        dni = self.cleaned_data.get('dni', '').strip()
+
+        if not dni.isdigit():
+            raise ValidationError("El DNI solo puede contener números.")
+        if len(dni) < 7 or len(dni) > 10:
+            raise ValidationError("El DNI debe tener entre 7 y 10 dígitos.")
+
+        return dni
+
+    def clean_telefono(self):
+        tel = self.cleaned_data.get('telefono', '').strip()
+
+        if not tel.isdigit():
+            raise ValidationError("El teléfono solo puede contener números.")
+        if len(tel) < 7:
+            raise ValidationError("El teléfono es demasiado corto.")
+
+        return tel
+
+    def clean_email(self):
+        email = self.cleaned_data.get('email', '').strip()
+
+        try:
+            validate_email(email)
+        except ValidationError:
+            raise ValidationError("Ingrese un email válido (ej: usuario@dominio.com).")
+        return email
+
+    def clean_fecha_nacimiento(self):
+        fecha = self.cleaned_data.get('fecha_nacimiento')
+
+        if fecha is None:
+            return fecha
+        limite = date(2005, 1, 1)
+        if fecha >= limite:
+            raise ValidationError("La fecha debe ser anterior al año 2005.")
+
+        return fecha
     def clean(self):
         cleaned = super().clean()
+
         dni = cleaned.get('dni')
         telefono = cleaned.get('telefono')
         email = cleaned.get('email')
 
-        if Empleados.objects.filter(dni=dni).exclude(pk=self.instance.pk).exists():
+        if dni and Empleados.objects.filter(dni=dni).exclude(pk=self.instance.pk).exists():
             raise ValidationError("Ya existe un empleado con ese DNI.")
-        if Empleados.objects.filter(telefono=telefono).exclude(pk=self.instance.pk).exists():
+
+        if telefono and Empleados.objects.filter(telefono=telefono).exclude(pk=self.instance.pk).exists():
             raise ValidationError("Ya existe un empleado con ese teléfono.")
-        if Empleados.objects.filter(email=email).exclude(pk=self.instance.pk).exists():
+
+        if email and Empleados.objects.filter(email=email).exclude(pk=self.instance.pk).exists():
             raise ValidationError("Ya existe un empleado con ese email.")
 
         return cleaned
 
 
-# ==========================================================
-# FORM MOVIMIENTO DE CAJA
-# ==========================================================
 class MovimientoCajaForm(forms.ModelForm):
     class Meta:
         model = MovimientosCaja
@@ -139,10 +180,6 @@ class MovimientoCajaForm(forms.ModelForm):
             'descripcion': forms.TextInput(attrs={'class': 'form-control'}),
         }
 
-
-# ==========================================================
-# FORM FORMA DE PAGO
-# ==========================================================
 class FormaPagoForm(forms.ModelForm):
     class Meta:
         model = FormaPago
@@ -151,10 +188,6 @@ class FormaPagoForm(forms.ModelForm):
             'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej: Tarjeta'}),
         }
 
-
-# ==========================================================
-# FORM INSUMOS
-# ==========================================================
 
 class InsumoForm(forms.ModelForm):
     unidad_medida = forms.ModelChoiceField(
@@ -175,17 +208,42 @@ class InsumoForm(forms.ModelForm):
             'proveedor': forms.Select(attrs={'class': 'form-select'}),
             'nombre': forms.TextInput(attrs={'class': 'form-control'}),
             'descripcion': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
-            'factor_conversion': forms.NumberInput(attrs={'class': 'form-control', 'value': 1}),
-            'stock_actual': forms.NumberInput(attrs={'class': 'form-control', 'value': 0}),
-            'stock_minimo': forms.NumberInput(attrs={'class': 'form-control'}),
-            'precio_costo_unitario': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'unidad_medida': forms.Select(attrs={'class': 'form-select'}),
+            'factor_conversion': forms.NumberInput(attrs={'class': 'form-control', 'value': 1, 'min': '1'}),
+            'stock_actual': forms.NumberInput(attrs={'class': 'form-control', 'value': 0, 'min': '0'}),
+            'stock_minimo': forms.NumberInput(attrs={'class': 'form-control', 'min': '0'}),
+            'precio_costo_unitario': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
         }
+
 
     def clean_nombre(self):
         nombre = self.cleaned_data["nombre"].strip()
         if Insumos.objects.filter(nombre__iexact=nombre).exclude(pk=self.instance.pk).exists():
             raise forms.ValidationError("⚠ Ya existe un insumo con ese nombre.")
         return nombre
+    def clean_stock_actual(self):
+        stock = self.cleaned_data.get("stock_actual")
+        if stock is not None and stock < 0:
+            raise forms.ValidationError("El stock actual no puede ser negativo.")
+        return stock
+
+    def clean_stock_minimo(self):
+        minimo = self.cleaned_data.get("stock_minimo")
+        if minimo is not None and minimo < 0:
+            raise forms.ValidationError("El stock mínimo no puede ser negativo.")
+        return minimo
+
+    def clean_factor_conversion(self):
+        factor = self.cleaned_data.get("factor_conversion")
+        if factor is None or factor <= 0:
+            raise forms.ValidationError("El factor de conversión debe ser mayor a 0.")
+        return factor
+
+    def clean_precio_costo_unitario(self):
+        precio = self.cleaned_data.get("precio_costo_unitario")
+        if precio is not None and precio < 0:
+            raise forms.ValidationError("El precio costo unitario no puede ser negativo.")
+        return precio
 
         
 
@@ -215,7 +273,6 @@ class DetallesCompraForm(forms.ModelForm):
     
 
 
-
 class ComprasForm(forms.ModelForm):
     forma_pago = forms.ModelChoiceField(
         queryset=FormaPago.objects.all(),
@@ -226,15 +283,17 @@ class ComprasForm(forms.ModelForm):
     
     class Meta:
         model = Compras
-        fields = ['proveedor', 'empleado', 'forma_pago']
+        fields = ['proveedor', 'forma_pago']  
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.fields['proveedor'].queryset = Proveedores.objects.filter(is_active=True).order_by('nombre')
         self.fields['proveedor'].widget.attrs.update({'class': 'form-select'})
-        self.fields['empleado'].widget.attrs.update({'class': 'form-select'})
+        self.fields['forma_pago'].widget.attrs.update({'class': 'form-select'})
 
 
-# Formset para los detalles de la compra (Múltiples insumos)
+
 DetallesCompraFormSet = inlineformset_factory(
     Compras, 
     DetallesCompra, 

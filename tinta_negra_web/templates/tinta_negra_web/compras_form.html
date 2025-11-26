@@ -33,15 +33,9 @@
                     {{ form.proveedor|add_class:"form-select" }}
                 </div>
 
-
                 <div class="col-md-4">
                     <label class="form-label">{{ form.forma_pago.label }}</label>
                     {{ form.forma_pago|add_class:"form-select" }}
-                </div>
-
-                <div class="col-md-4 mt-2">
-                    <label class="form-label">{{ form.fecha.label }}</label>
-                    {{ form.fecha|add_class:"form-control" }}
                 </div>
             </div>
 
@@ -140,7 +134,6 @@
     </td>
 </tr>
 </script>
-
 
 {% include 'tinta_negra_web/modals/proveedor_modal.html' %}
 {% include 'tinta_negra_web/modals/insumo_modal.html' %}
