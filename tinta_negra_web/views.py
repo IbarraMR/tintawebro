@@ -338,7 +338,6 @@ from django.core.paginator import Paginator
 @permission_required('core.view_insumos', raise_exception=True)
 def insumos_list(request):
 
-    # 🔍 Buscar por nombre o proveedor
     query = request.GET.get("q", "").strip()
 
     lista_insumos = Insumos.objects.all().order_by("nombre")
@@ -962,7 +961,6 @@ def empleados_list(request):
     return render(request, 'core/empleados/empleados_list.html', context)
 
 
-
 from django.core.mail import send_mail
 @never_cache
 @login_required
@@ -982,7 +980,7 @@ def empleado_create(request):
                     'title': 'Registrar Nuevo Empleado'
                 })
 
-            nombre_usuario = empleado.email 
+            nombre_usuario = empleado.email
             password_temporal = "tinta123"
 
             user = User.objects.create_user(
@@ -998,6 +996,7 @@ def empleado_create(request):
 
             empleado.user = user
             empleado.save()
+
             asunto = "Bienvenido a Tinta Negra - Acceso al Sistema"
             mensaje = f"""
 Hola {empleado.nombre} {empleado.apellido},
@@ -1018,7 +1017,7 @@ Equipo de Tinta Negra
                 send_mail(
                     asunto,
                     mensaje,
-                    "roibarra9229@gmail.com",  
+                    "roibarra9229@gmail.com",
                     [empleado.email],
                     fail_silently=False,
                 )
@@ -1030,11 +1029,14 @@ Equipo de Tinta Negra
                 request,
                 f'Empleado registrado correctamente. Se envió el usuario y la contraseña a {empleado.email}.'
             )
-            list(messages.get_messages(request))
             return redirect('empleados_list')
 
         else:
-            messages.error(request, 'Error al registrar el empleado. Verifica los datos.')
+            messages.error(request, 'Error al registrar el empleado. Verifica los datos del formulario.')
+            return render(request, 'core/empleados/empleado_form.html', {
+                'form': form,
+                'title': 'Registrar Nuevo Empleado'
+            })
 
     else:
         form = EmpleadoForm()
@@ -1043,6 +1045,7 @@ Equipo de Tinta Negra
         'form': form,
         'title': 'Registrar Nuevo Empleado'
     })
+
 
 
 
@@ -1667,12 +1670,10 @@ def generar_pdf_presupuesto(request, pk):
 
     return response
 
-
 @login_required
 @require_POST
 def presupuesto_confirmar(request, pk):
     presupuesto = get_object_or_404(Presupuestos, id_presupuesto=pk)
-
     if not presupuesto.id_cliente:
         messages.error(request, "Debes seleccionar un cliente antes de confirmar el presupuesto.")
         return redirect("presupuesto_edit", presupuesto.id_presupuesto)
@@ -1684,11 +1685,35 @@ def presupuesto_confirmar(request, pk):
 
     total = trabajos_qs.aggregate(s=Sum("total_trabajo"))["s"] or 0
     presupuesto.total_presupuesto = total
-    presupuesto.estado_presupuesto = "EN ESPERA"
+    faltantes_alerta = []
+
+    for trabajo in trabajos_qs:
+        producto = getattr(trabajo, "producto", None)
+
+        if producto and producto.tipo and producto.tipo.nombre_tipo == "Tercerizado":
+            cantidad_total = trabajo.cantidad or 0
+            stock_previo = producto.stock_actual or 0
+            nuevo_stock = stock_previo - cantidad_total
+            producto.stock_actual = nuevo_stock
+            producto.save()
+
+            if nuevo_stock < 0:
+                faltantes_alerta.append(
+                    f"Faltan {abs(nuevo_stock)} unidades de '{producto.nombre}'."
+                )
+
+    presupuesto.estado_presupuesto = "CONFIRMADO"
     presupuesto.save()
 
-    messages.success(request, "Presupuesto confirmado correctamente.")
+    if faltantes_alerta:
+        for alerta in faltantes_alerta:
+            messages.warning(request, alerta)
+        messages.success(request, "Presupuesto confirmado con faltantes de stock.")
+    else:
+        messages.success(request, "Presupuesto confirmado correctamente.")
+
     return redirect("presupuesto_detalle", presupuesto.id_presupuesto)
+
 
 @login_required
 def presupuesto_edit(request, presupuesto_id):
@@ -1879,33 +1904,8 @@ Emilia Lopez
     })
 
 
-@login_required
-def agregar_trabajo_presupuesto(request, presupuesto_id):
-    presupuesto = Presupuestos.objects.get(pk=presupuesto_id)
-
-    if request.method == "POST":
-        trabajo = request.POST["trabajo"]
-        cantidad = int(request.POST["cantidad"])
-        precio_unitario = float(request.POST["precio_unitario"])
-        subtotal = cantidad * precio_unitario
-        editar_id = request.POST.get("editar_id")
-        if editar_id:
-            Trabajo.objects.get(pk=editar_id).delete()
-        PresupuestosProductos.objects.create(
-            presupuesto=presupuesto,
-            trabajo=trabajo,
-            cantidad=cantidad,
-            precio_unitario=precio_unitario,
-            subtotal=subtotal,
-        )
-        presupuesto.total_presupuesto += subtotal
-        presupuesto.save()
-
-        return redirect("presupuesto_detalle", presupuesto_id)
-
-    return render(request, "core/presupuestos/agregar_trabajo.html", {
-        "presupuesto": presupuesto,
-    })
+from django.template.loader import render_to_string
+from django.http import JsonResponse
 
 
 @login_required
@@ -1961,11 +1961,10 @@ def crear_presupuesto_borrador(request):
 def agregar_trabajo(request, presupuesto_id):
 
     from decimal import Decimal
-
     if not presupuesto_id or presupuesto_id == "0":
         nuevo = Presupuestos.objects.create(
             fecha_emision=timezone.now().date(),
-            estado_presupuesto="EN ESPERA",  # 🔹 CAMBIADO: coincide con tu modelo
+            estado_presupuesto="EN ESPERA",
             subtotal=Decimal("0.00"),
             total_presupuesto=Decimal("0.00"),
         )
@@ -1984,40 +1983,36 @@ def agregar_trabajo(request, presupuesto_id):
         })
 
     nombre = (request.POST.get("nombre_trabajo") or "").strip()
-    descripcion = request.POST.get("descripcion_trabajo") or ""
-
-    try:
-        cantidad = int(request.POST.get("cantidad_trabajo") or 1)
-    except ValueError:
-        cantidad = 1
-
-    if cantidad < 1:
-        return JsonResponse({"ok": False, "error": "La cantidad debe ser mayor o igual a 1."})
-
-    try:
-        costo_diseno = Decimal(request.POST.get("costo_diseno_trabajo") or "0")
-    except Exception:
-        costo_diseno = Decimal("0")
-
-    if costo_diseno < 0:
-        return JsonResponse({"ok": False, "error": "El costo de diseño no puede ser negativo."})
-
-    try:
-        margen = Decimal(request.POST.get("margen_trabajo") or "0")
-    except Exception:
-        margen = Decimal("0")
-
-    if margen < 0:
-        return JsonResponse({"ok": False, "error": "El margen no puede ser negativo."})
-
     if not nombre:
         return JsonResponse({"ok": False, "error": "Debe ingresar un nombre para el trabajo."})
 
-    insumos_json = request.POST.get("insumos_json", "[]")
+    descripcion = request.POST.get("descripcion_trabajo") or ""
 
     try:
+        cantidad = int(request.POST.get("cantidad_trabajo") or "1")
+        if cantidad < 1:
+            return JsonResponse({"ok": False, "error": "La cantidad del trabajo debe ser ≥ 1."})
+    except:
+        return JsonResponse({"ok": False, "error": "Cantidad inválida."})
+
+    try:
+        costo_diseno = Decimal(request.POST.get("costo_diseno_trabajo") or "0")
+        if costo_diseno < 0:
+            return JsonResponse({"ok": False, "error": "El costo de diseño debe ser ≥ 0."})
+    except:
+        return JsonResponse({"ok": False, "error": "Costo de diseño inválido."})
+
+    try:
+        margen = Decimal(request.POST.get("margen_trabajo") or "0")
+        if margen < 0 or margen > 100:
+            return JsonResponse({"ok": False, "error": "El margen debe ser entre 0 y 100."})
+    except:
+        return JsonResponse({"ok": False, "error": "Margen inválido."})
+
+    insumos_json = request.POST.get("insumos_json", "[]")
+    try:
         lista_insumos = json.loads(insumos_json)
-    except json.JSONDecodeError:
+    except:
         return JsonResponse({"ok": False, "error": "Error al leer los insumos enviados."})
 
     if not lista_insumos:
@@ -2030,41 +2025,32 @@ def agregar_trabajo(request, presupuesto_id):
 
         try:
             insumo = Insumos.objects.get(id_insumo=id_insumo, is_active=True)
-        except Insumos.DoesNotExist:
-            return JsonResponse({
-                "ok": False,
-                "error": "Uno de los insumos no existe o está dado de baja."
-            })
+        except:
+            return JsonResponse({"ok": False, "error": "Insumo inválido o dado de baja."})
 
         try:
             cant = Decimal(str(item.get("cantidad") or "1"))
+            if cant < 1:
+                return JsonResponse({"ok": False, "error": "Cantidades de insumo deben ser ≥ 1."})
         except:
-            cant = Decimal("1")
-        if cant < 1:
-            return JsonResponse({"ok": False, "error": "Las cantidades de insumos deben ser ≥ 1."})
+            return JsonResponse({"ok": False, "error": "Cantidad inválida de insumo."})
+
         factor = Decimal(insumo.factor_conversion or 1)
-        cantidad_real = cant / factor  # cantidad equivalente en stock real
+        cantidad_real = cant / factor
 
         if cantidad_real > Decimal(insumo.stock_actual or 0):
-            disponible_real = float(insumo.stock_actual or 0)
-            disponible_hojas = disponible_real * float(factor)
-            
+            disp_real = float(insumo.stock_actual or 0)
+            disp_hojas = disp_real * float(factor)
             return JsonResponse({
                 "ok": False,
-                "error": (
-                    f"No hay stock suficiente de '{insumo.nombre}'. "
-                    f"Disponible: {disponible_real:.2f} unidades "
-                    f"(≈ {disponible_hojas:.0f} hojas)"
-                )
+                "error": f"No hay stock suficiente de '{insumo.nombre}'. "
+                         f"Disponible: {disp_real:.2f} unidades "
+                         f"(≈ {disp_hojas:.0f} hojas)"
             })
-                
 
     editar_id = request.POST.get("editar_trabajo_id")
     if editar_id:
-        try:
-            Trabajo.objects.get(pk=editar_id, presupuesto=presupuesto).delete()
-        except Trabajo.DoesNotExist:
-            pass
+        Trabajo.objects.filter(pk=editar_id, presupuesto=presupuesto).delete()
 
     trabajo = Trabajo.objects.create(
         presupuesto=presupuesto,
@@ -2080,24 +2066,10 @@ def agregar_trabajo(request, presupuesto_id):
 
     subtotal_insumos = Decimal("0.00")
 
-    # Creo TrabajoInsumo para cada insumo
     for item in lista_insumos:
-        id_insumo = item.get("id_insumo")
-        if not id_insumo:
-            continue
-
-        insumo = Insumos.objects.get(id_insumo=id_insumo)
-
-        try:
-            cant = Decimal(str(item.get("cantidad") or "1"))
-        except:
-            cant = Decimal("1")
-
-        try:
-            precio_unit = Decimal(str(item.get("costo_unitario") or "0"))
-        except:
-            precio_unit = Decimal("0")
-
+        insumo = Insumos.objects.get(id_insumo=item["id_insumo"])
+        cant = Decimal(str(item.get("cantidad") or "1"))
+        precio_unit = Decimal(str(item.get("costo_unitario") or "0"))
         subtotal = precio_unit * cant
 
         TrabajoInsumo.objects.create(
@@ -2119,7 +2091,6 @@ def agregar_trabajo(request, presupuesto_id):
     trabajo.total_trabajo = total_trabajo
     trabajo.save()
 
-    # Recalcular total del presupuesto
     presupuesto.total_presupuesto = (
         presupuesto.trabajos.aggregate(s=Sum("total_trabajo"))["s"] or Decimal("0.00")
     )
@@ -2131,14 +2102,12 @@ def agregar_trabajo(request, presupuesto_id):
         request=request,
     )
 
-    return JsonResponse(
-        {
-            "ok": True,
-            "tabla": tabla_html,
-            "total": f"{presupuesto.total_presupuesto:.2f}",
-            "presupuesto_id": presupuesto.id_presupuesto,
-        }
-    )
+    return JsonResponse({
+        "ok": True,
+        "tabla": tabla_html,
+        "total": f"{presupuesto.total_presupuesto:.2f}",
+        "presupuesto_id": presupuesto.id_presupuesto,
+    })
 
 
 

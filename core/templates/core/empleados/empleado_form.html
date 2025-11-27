@@ -6,6 +6,8 @@
 {% block content %}
 <h2 class="text-white mb-4">{{ title }}</h2>
 <p class="text-muted">Complete los campos para registrar un nuevo empleado.</p>
+{% include "core/partials/toasts.html" %}
+
 
 <div class="card p-4" style="background-color: #1f1f1f; border: 1px solid #333;">
   <form method="post" novalidate>
@@ -58,6 +60,18 @@
       {{ form.is_active|add_class:"form-check-input" }}
       <label for="id_is_active" class="form-check-label text-white">Activo</label>
     </div>
+    
+    {% if form.errors %}
+    <div class="alert alert-danger mt-3">
+      <ul class="mb-0">
+        {% for field, errors in form.errors.items %}
+        <li>
+          <strong>{{ field|capfirst }}:</strong> {{ errors|join:", " }}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
 
     <div class="d-flex justify-content-start mt-4">
       <button type="submit" class="btn btn-success me-2">

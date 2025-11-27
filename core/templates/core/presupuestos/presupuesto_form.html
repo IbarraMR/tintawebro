@@ -27,11 +27,8 @@
 
       <script>
       document.addEventListener("DOMContentLoaded", () => {
-
           const selectCliente = document.getElementById("id_id_cliente");
-
           selectCliente?.addEventListener("change", function () {
-
               let presupuestoId = document.getElementById("presupuesto_id")?.value || "0";
               const idCliente = this.value;
               if (!idCliente) return;
@@ -43,9 +40,7 @@
                       "X-Requested-With": "XMLHttpRequest",
                       "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
                   },
-                  body: new URLSearchParams({
-                      id_cliente: idCliente
-                  })
+                  body: new URLSearchParams({ id_cliente: idCliente })
               })
               .then(r => r.json())
               .then(data => {
@@ -65,12 +60,10 @@
       document.addEventListener("DOMContentLoaded", () => {
           const hoy = new Date().toISOString().split("T")[0];
           const fEmision = document.getElementById("id_fecha_emision");
-
-          if (fEmision) {
-              fEmision.setAttribute("min", hoy);
-          }
+          if (fEmision) fEmision.setAttribute("min", hoy);
       });
       </script>
+
     </div>
 
     <hr class="text-secondary mb-4">
@@ -89,7 +82,6 @@
     </ul>
 
     <div id="seccion-trabajo" class="p-3 bg-black rounded shadow-sm">
-
       <div class="row g-3">
         <div class="col-md-6">
           <label class="form-label text-white">Trabajo</label>
@@ -114,9 +106,7 @@
                   class="form-control"
                   value="0"
                   min="0"
-                  max="100"
-                  step="1"
-                  oninput="validarMargen(this)">
+                  max="100">
         </div>
       </div>
 
@@ -157,6 +147,7 @@
 
     </div>
 
+    <!-- PRODUCTOS DEL CATALOGO -->
     <div id="seccion-producto" class="d-none mt-4 p-3 bg-black rounded shadow-sm">
       <h5 class="text-white mb-3">Seleccionar producto del catálogo</h5>
 
@@ -180,7 +171,6 @@
             <tr class="producto-item"
                 data-nombre="{{ prod.nombre|lower }}"
                 data-tipo="{{ prod.tipo.nombre_tipo|lower }}">
-
               <td>{{ prod.nombre }}</td>
               <td class="text-center">{{ prod.tipo.nombre_tipo }}</td>
               <td class="text-end">${{ prod.precio|floatformat:2 }}</td>
@@ -205,7 +195,6 @@
       <nav class="mt-3">
         <ul id="paginacionProductos" class="pagination pagination-sm"></ul>
       </nav>
-
     </div>
 
     <hr class="text-secondary mt-4">
@@ -227,19 +216,20 @@
 
     <div class="mt-4 d-flex gap-2">
       <button id="btnFinalizar" class="btn btn-success disabled"
-              disabled formaction="{% url 'presupuesto_confirmar' 0 %}">
-        Finalizar presupuesto
+              disabled
+              formaction="{% url 'presupuesto_confirmar' presupuesto.id_presupuesto %}">
+          Finalizar presupuesto
       </button>
+
 
       <a href="{% url 'presupuestos_list' %}" class="btn btn-secondary">Cancelar</a>
     </div>
 
-    </form>
+  </form>
 
-    {% include "core/presupuestos/_modal_cliente.html" %}
+  {% include "core/presupuestos/_modal_cliente.html" %}
 
 </div>
-
 <script type="text/template" id="template-insumo">
   <tr class="insumo-row">
     <td>
@@ -253,19 +243,9 @@
         {% endfor %}
       </select>
     </td>
-
-    <td>
-      <input type="number" class="form-control form-control-sm cantidad-insumo"
-             value="1" min="1">
-    </td>
-
-    <td>
-      <input type="text" class="form-control form-control-sm text-end costo-unit"
-             value="0.00" readonly>
-    </td>
-
+    <td><input type="number" class="form-control form-control-sm cantidad-insumo" value="1" min="1"></td>
+    <td><input type="text" class="form-control form-control-sm text-end costo-unit" value="0.00" readonly></td>
     <td class="text-end subtotal-cell">0.00</td>
-
     <td class="text-center">
       <button type="button" class="btn btn-danger btn-sm btn-del-insumo">
         <i class="fa-solid fa-trash"></i>
@@ -274,359 +254,390 @@
   </tr>
 </script>
 
+<!-- VALIDACIÓN MARGEN Y CAMPOS NUMÉRICOS -->
+<script>
+document.addEventListener("input", function(e) {
+  let id = e.target.id;
+
+  if (id === "margen_trabajo") {
+    let v = e.target.value.replace(/[^0-9]/g, "");
+    if (v === "") v = "0";
+    let num = parseInt(v);
+    if (num < 0) num = 0;
+    if (num > 100) num = 100;
+    e.target.value = num.toString();
+    return;
+  }
+
+  const campos = ["cantidad-insumo", "cantidad_trabajo", "costo_diseno_trabajo"];
+  const esCampoValido =
+    campos.some(c => e.target.classList.contains(c)) ||
+    campos.includes(id);
+
+  if (!esCampoValido) return;
+
+  let v = e.target.value;
+  v = v.replace(/[^0-9.]/g, "");
+  if (v === "" || parseFloat(v) <= 0) v = "1";
+  e.target.value = v;
+});
+</script>
+
+<!-- CAMBIO ENTRE TABS -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const tabTrabajo = document.getElementById("tab-trabajo");
+  const tabProducto = document.getElementById("tab-producto");
+  const secTrabajo = document.getElementById("seccion-trabajo");
+  const secProducto = document.getElementById("seccion-producto");
+
+  tabTrabajo.addEventListener("click", (e) => {
+    e.preventDefault();
+    tabTrabajo.classList.add("active");
+    tabProducto.classList.remove("active");
+    secTrabajo.classList.remove("d-none");
+    secProducto.classList.add("d-none");
+  });
+
+  tabProducto.addEventListener("click", (e) => {
+    e.preventDefault();
+    tabTrabajo.classList.remove("active");
+    tabProducto.classList.add("active");
+    secTrabajo.classList.add("d-none");
+    secProducto.classList.remove("d-none");
+  });
+});
+</script>
+
+<!-- PAGINACIÓN Y BÚSQUEDA PRODUCTOS -->
 <script>
 document.addEventListener("DOMContentLoaded", () => {
 
-    const tabTrabajo = document.getElementById("tab-trabajo");
-    const tabProducto = document.getElementById("tab-producto");
-    const secTrabajo = document.getElementById("seccion-trabajo");
-    const secProducto = document.getElementById("seccion-producto");
+  const filas = Array.from(document.querySelectorAll(".producto-item"));
+  const tablaBody = document.getElementById("productosBody");
+  const paginacion = document.getElementById("paginacionProductos");
+  const buscador = document.getElementById("buscadorProductos");
 
-    function activarTrabajo(e) {
-        e.preventDefault();
-        tabTrabajo.classList.add("active");
-        tabProducto.classList.remove("active");
-        secTrabajo.classList.remove("d-none");
-        secProducto.classList.add("d-none");
-    }
+  let paginaActual = 1;
+  const filasPorPagina = 6;
 
-    function activarProducto(e) {
-        e.preventDefault();
-        tabTrabajo.classList.remove("active");
-        tabProducto.classList.add("active");
-        secTrabajo.classList.add("d-none");
-        secProducto.classList.remove("d-none");
-    }
+  function actualizarTablaProd() {
+    const q = (buscador.value || "").toLowerCase();
 
-    tabTrabajo.addEventListener("click", activarTrabajo);
-    tabProducto.addEventListener("click", activarProducto);
+    const filtrados = filas.filter(row =>
+      row.dataset.nombre.includes(q) ||
+      row.dataset.tipo.includes(q)
+    );
 
-    const filas = Array.from(document.querySelectorAll(".producto-item"));
-    const tablaBody = document.getElementById("productosBody");
-    const paginacion = document.getElementById("paginacionProductos");
-    const buscador = document.getElementById("buscadorProductos");
+    const totalPag = Math.max(1, Math.ceil(filtrados.length / filasPorPagina));
+    paginaActual = Math.min(paginaActual, totalPag);
 
-    let paginaActual = 1;
-    const filasPorPagina = 6;
+    const ini = (paginaActual - 1) * filasPorPagina;
+    const vis = filtrados.slice(ini, ini + filasPorPagina);
 
-    function actualizarTablaProd() {
-        const q = (buscador.value || "").toLowerCase();
+    tablaBody.innerHTML = "";
+    vis.forEach(row => tablaBody.appendChild(row));
 
-        const filtrados = filas.filter(row =>
-            row.dataset.nombre.includes(q) ||
-            row.dataset.tipo.includes(q)
-        );
+    renderPag(totalPag);
+  }
 
-        const totalPag = Math.max(1, Math.ceil(filtrados.length / filasPorPagina));
-        paginaActual = Math.min(paginaActual, totalPag);
+  function renderPag(total) {
+    paginacion.innerHTML = "";
+    if (total <= 1) return;
 
-        const ini = (paginaActual - 1) * filasPorPagina;
-        const vis = filtrados.slice(ini, ini + filasPorPagina);
+    for (let i = 1; i <= total; i++) {
+      const li = document.createElement("li");
+      li.classList.add("page-item");
+      if (i === paginaActual) li.classList.add("active");
 
-        tablaBody.innerHTML = "";
-        vis.forEach(row => tablaBody.appendChild(row));
-
-        renderPag(totalPag);
-    }
-
-    function renderPag(total) {
-        paginacion.innerHTML = "";
-        if (total <= 1) return;
-
-        for (let i = 1; i <= total; i++) {
-            const li = document.createElement("li");
-            li.classList.add("page-item");
-            if (i === paginaActual) li.classList.add("active");
-
-            li.innerHTML = `<a class="page-link" style="cursor:pointer;">${i}</a>`;
-            li.onclick = () => {
-                paginaActual = i;
-                actualizarTablaProd();
-            };
-
-            paginacion.appendChild(li);
-        }
-    }
-
-    buscador.addEventListener("input", () => {
-        paginaActual = 1;
+      li.innerHTML = `<a class="page-link" style="cursor:pointer;">${i}</a>`;
+      li.onclick = () => {
+        paginaActual = i;
         actualizarTablaProd();
+      };
+
+      paginacion.appendChild(li);
+    }
+  }
+
+  buscador.addEventListener("input", () => {
+    paginaActual = 1;
+    actualizarTablaProd();
+  });
+
+  actualizarTablaProd();
+});
+</script>
+
+<!-- REGLAS DE CÁLCULO -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+  function recalcularTodos() {
+    let subtotalInsumos = 0;
+
+    document.querySelectorAll("#insumos-body tr").forEach(row => {
+      const opt = row.querySelector(".insumo-select")?.selectedOptions[0];
+      if (!opt) return;
+
+      const costo = parseFloat(opt.dataset.costo || 0);
+      const factor = parseFloat(opt.dataset.factor || 1);
+      const cant = parseFloat(row.querySelector(".cantidad-insumo").value || 1);
+
+      const precioUnit = costo / factor;
+      const subtotal = precioUnit * cant;
+
+      row.querySelector(".costo-unit").value = precioUnit.toFixed(2);
+      row.querySelector(".subtotal-cell").textContent = subtotal.toFixed(2);
+
+      subtotalInsumos += subtotal;
     });
 
-    actualizarTablaProd();
+    document.getElementById("subtotal-trabajo").textContent =
+      subtotalInsumos.toFixed(2);
+
+    recalcularTotalesTrabajo();
+  }
+
+  function recalcularTotalesTrabajo() {
+    const subInsumos = parseFloat(document.getElementById("subtotal-trabajo").textContent);
+    const dis = parseFloat(document.getElementById("costo_diseno_trabajo").value || 0);
+    const marg = parseFloat(document.getElementById("margen_trabajo").value || 0);
+    const cant = parseFloat(document.getElementById("cantidad_trabajo").value || 1);
+
+    const costoBruto = subInsumos + dis;
+    const precioUnit = costoBruto + (costoBruto * (marg / 100));
+    const total = precioUnit * cant;
+
+    document.getElementById("unitario-trabajo").textContent = precioUnit.toFixed(2);
+    document.getElementById("total-trabajo").textContent = total.toFixed(2);
+  }
+
+  const btnAdd = document.getElementById("add-insumo");
+  const body = document.getElementById("insumos-body");
+
+  btnAdd?.addEventListener("click", () => {
+    const temp = document.createElement("tbody");
+    temp.innerHTML = document.getElementById("template-insumo").innerHTML.trim();
+    const row = temp.firstElementChild;
+    body.appendChild(row);
+
+    row.querySelector(".insumo-select").addEventListener("change", recalcularTodos);
+    row.querySelector(".cantidad-insumo").addEventListener("input", recalcularTodos);
+    row.querySelector(".btn-del-insumo").addEventListener("click", () => {
+      row.remove();
+      recalcularTodos();
+    });
+
+    recalcularTodos();
+  });
+
+});
+</script>
+
+<script>
+function initAgregarProducto() {
+  document.querySelectorAll(".btn-add-producto").forEach(btn => {
+    btn.addEventListener("click", function () {
+
+      let presupuestoId = document.getElementById("presupuesto_id")?.value;
+      if (!presupuestoId) {
+        alert("No existe presupuesto activo.");
+        return;
+      }
+
+      const cantidad = this.closest("tr").querySelector(".input-cant-prod").value;
+
+      fetch("{% url 'agregar_producto_presupuesto' 0 %}".replace("0", presupuestoId), {
+        method: "POST",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value,
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+        },
+        body: new URLSearchParams({
+          id_producto: this.dataset.id,
+          cantidad: cantidad,
+        })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (!data.ok) {
+          alert(data.error);
+          return;
+        }
+        actualizarTablaTrabajo(data);
+      })
+      .catch(err => console.error("ERROR AJAX PRODUCTO:", err));
+    });
+  });
+}
+
+function actualizarTablaTrabajo(data) {
+  const cont = document.getElementById("contenedor-tabla-trabajos");
+  if (cont && data.tabla) cont.innerHTML = data.tabla;
+
+  if (data.total) {
+    document.getElementById("presupuesto-total").textContent = parseFloat(data.total).toFixed(2);
+
+  }
+  if (data.presupuesto_id) {
+    const btnFinal = document.getElementById("btnFinalizar");
+
+    btnFinal.classList.remove("disabled");
+    btnFinal.removeAttribute("disabled");
+    btnFinal.setAttribute("formaction",
+        "{% url 'presupuesto_confirmar' 0 %}".replace("0", data.presupuesto_id)
+    );
+  }
+
+
+  if (data.presupuesto_id) {
+    document.getElementById("presupuesto_id").value = data.presupuesto_id;
+  }
+
+  const btnFin = document.getElementById("btnFinalizar");
+  if (data.total > 0 && data.presupuesto_id) {
+    btnFin.classList.remove("disabled");
+    btnFin.disabled = false;
+    btnFin.setAttribute(
+      "formaction",
+      "{% url 'presupuesto_confirmar' 0 %}".replace("0", data.presupuesto_id)
+    );
+  }
+
+  initAccionesTablaTrabajos();
+}
+
+
+function initAccionesTablaTrabajos() {
+  document.querySelectorAll(".btn-eliminar-trabajo").forEach(btn => {
+    btn.addEventListener("click", function () {
+      fetch("{% url 'eliminar_trabajo' 0 %}".replace("0", this.dataset.id), {
+        method: "POST",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value,
+        }
+      })
+      .then(r => r.json())
+      .then(data => actualizarTablaTrabajo(data));
+    });
+  });
+
+  const total = parseFloat(document.getElementById("presupuesto-total").textContent || "0");
+  const btnFin = document.getElementById("btnFinalizar");
+  if (total > 0) {
+    btnFin.classList.remove("disabled");
+    btnFin.disabled = false;
+  } else {
+    btnFin.classList.add("disabled");
+    btnFin.disabled = true;
+  }
+}
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  initAgregarProducto();
+  initAccionesTablaTrabajos();
 });
 </script>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
 
+  const btnAddTrabajo = document.getElementById("btnAddTrabajo");
+
+  btnAddTrabajo?.addEventListener("click", function () {
+
     let presupuestoId = document.getElementById("presupuesto_id")?.value;
+    if (!presupuestoId) presupuestoId = "0";
 
-    function actualizarTablaTrabajo(data) {
+    const nombre = document.getElementById("nombre_trabajo").value.trim();
+    const cantidad = document.getElementById("cantidad_trabajo").value;
+    const costo = document.getElementById("costo_diseno_trabajo").value;
+    const margen = document.getElementById("margen_trabajo").value;
+    const desc = document.getElementById("descripcion_trabajo").value.trim();
 
-        if (data.presupuesto_id) {
-            document.getElementById("presupuesto_id").value = data.presupuesto_id;
-            presupuestoId = data.presupuesto_id;
-            console.log("Nuevo presupuesto_id recibido:", presupuestoId);
-        }
-
-        const cont = document.getElementById("contenedor-tabla-trabajos");
-        if (cont && data.tabla) cont.innerHTML = data.tabla;
-
-        const total = document.getElementById("presupuesto-total");
-        if (data.total) total.textContent = parseFloat(data.total).toFixed(2);
-
-        const btnFin = document.getElementById("btnFinalizar");
-        if (btnFin && data.total) {
-            btnFin.classList.remove("disabled");
-            btnFin.disabled = false;
-            btnFin.formAction =
-                "{% url 'presupuesto_confirmar' 0 %}".replace("0", presupuestoId);
-        }
-
-        initAccionesTablaTrabajos();
+    if (!nombre) {
+      alert("⚠ Debe ingresar un nombre para el trabajo.");
+      return;
     }
 
-    function initAgregarTrabajo() {
-
-        document.getElementById("btnAddTrabajo").addEventListener("click", function (e) {
-            e.preventDefault();
-
-            if (!presupuestoId) {
-                alert("⚠ Error: no existe un presupuesto activo.");
-                return;
-            }
-
-            const filas = document.querySelectorAll("#insumos-body tr");
-            if (!filas.length) {
-                alert("Debes agregar mínimo un insumo.");
-                return;
-            }
-
-            const insumosData = [];
-
-            filas.forEach(row => {
-                insumosData.push({
-                    id_insumo: row.querySelector(".insumo-select").value,
-                    cantidad: row.querySelector(".cantidad-insumo").value,
-                    costo_unitario: row.querySelector(".costo-unit").value,
-                    subtotal: row.querySelector(".subtotal-cell").textContent,
-                });
-            });
-
-            fetch("{% url 'agregar_trabajo' 0 %}".replace("0", presupuestoId), {
-                method: "POST",
-                headers: {
-                    "X-Requested-With": "XMLHttpRequest",
-                    "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value,
-                    "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-                },
-                body: new URLSearchParams({
-                    nombre_trabajo: document.getElementById("nombre_trabajo").value,
-                    descripcion_trabajo: document.getElementById("descripcion_trabajo").value,
-                    cantidad_trabajo: document.getElementById("cantidad_trabajo").value,
-                    costo_diseno_trabajo: document.getElementById("costo_diseno_trabajo").value,
-                    margen_trabajo: document.getElementById("margen_trabajo").value,
-                    insumos_json: JSON.stringify(insumosData),
-                })
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (!data.ok) {
-                    alert(data.error);
-                    return;
-                }
-
-                actualizarTablaTrabajo(data);
-            })
-            .catch(err => console.error("ERROR AJAX TRABAJO:", err));
-        });
-    }
-
-    function initAgregarProducto() {
-
-        document.querySelectorAll(".btn-add-producto").forEach(btn => {
-
-            btn.addEventListener("click", function () {
-
-                if (!presupuestoId) {
-                    alert("⚠ No existe presupuesto activo.");
-                    return;
-                }
-
-                const cantidad = this.closest("tr").querySelector(".input-cant-prod").value;
-
-                fetch("{% url 'agregar_producto_presupuesto' 0 %}".replace("0", presupuestoId), {
-                    method: "POST",
-                    headers: {
-                        "X-Requested-With": "XMLHttpRequest",
-                        "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value,
-                        "Content-Type": "application/x-www-form-urlencoded;border=UTF-8",
-                    },
-                    body: new URLSearchParams({
-                        id_producto: this.dataset.id,
-                        cantidad: cantidad,
-                    })
-                })
-                .then(r => r.json())
-                .then(data => {
-                    if (!data.ok) {
-                        alert(data.error);
-                        return;
-                    }
-                    actualizarTablaTrabajo(data);
-                })
-                .catch(err => console.error("ERROR AJAX PRODUCTO:", err));
-            });
-        });
-    }
-
-    function initAccionesTablaTrabajos() {
-        document.querySelectorAll(".btn-eliminar-trabajo").forEach(btn => {
-            btn.addEventListener("click", function () {
-                fetch("{% url 'eliminar_trabajo' 0 %}".replace("0", this.dataset.id), {
-                    method: "POST",
-                    headers: {
-                        "X-Requested-With": "XMLHttpRequest",
-                        "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value,
-                    }
-                })
-                .then(r => r.json())
-                .then(data => actualizarTablaTrabajo(data));
-            });
-        });
-    }
-
-    initAgregarTrabajo();
-    initAgregarProducto();
-    initAccionesTablaTrabajos();
-
-});
-</script>
-
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-
-    function recalcularTodos() {
-
-        let subtotalInsumos = 0;
-
-        document.querySelectorAll("#insumos-body tr").forEach(row => {
-
-            const opt = row.querySelector(".insumo-select")?.selectedOptions[0];
-            if (!opt) return;
-
-            const costo = parseFloat(opt.dataset.costo || 0);
-            const factor = parseFloat(opt.dataset.factor || 1);
-            const cant = parseFloat(row.querySelector(".cantidad-insumo").value || 1);
-
-            const precioUnit = factor > 0 ? (costo / factor) : costo;
-            const subtotal = precioUnit * cant;
-
-            row.querySelector(".costo-unit").value = precioUnit.toFixed(2);
-            row.querySelector(".subtotal-cell").textContent = subtotal.toFixed(2);
-
-            subtotalInsumos += subtotal;
-        });
-
-        document.getElementById("subtotal-trabajo").textContent =
-            subtotalInsumos.toFixed(2);
-
-        recalcularTotalesTrabajo();
-    }
-
-    function recalcularTotalesTrabajo() {
-
-        const subInsumos = parseFloat(document.getElementById("subtotal-trabajo").textContent);
-        const dis = parseFloat(document.getElementById("costo_diseno_trabajo").value || 0);
-        const marg = parseFloat(document.getElementById("margen_trabajo").value || 0);
-        const cant = parseFloat(document.getElementById("cantidad_trabajo").value || 1);
-
-        const costoBruto = subInsumos + dis;
-        const precioUnit = costoBruto + (costoBruto * (marg / 100));
-        const total = precioUnit * cant;
-
-        document.getElementById("unitario-trabajo").textContent = precioUnit.toFixed(2);
-        document.getElementById("total-trabajo").textContent = total.toFixed(2);
-    }
-
-    function activarEventosRow(row) {
-        row.querySelector(".insumo-select").addEventListener("change", recalcularTodos);
-        row.querySelector(".cantidad-insumo").addEventListener("input", recalcularTodos);
-
-        row.querySelector(".btn-del-insumo").addEventListener("click", () => {
-            row.remove();
-            recalcularTodos();
-        });
-    }
-
-
-    const btnAdd = document.getElementById("add-insumo");
-    const body = document.getElementById("insumos-body");
-
-    btnAdd.addEventListener("click", () => {
-        const temp = document.createElement("tbody");
-        temp.innerHTML = document.getElementById("template-insumo").innerHTML.trim();
-
-        const row = temp.firstElementChild;
-        body.appendChild(row);
-
-        activarEventosRow(row);
-        recalcularTodos();
+    let insumos = [];
+    document.querySelectorAll("#insumos-body tr").forEach(row => {
+      insumos.push({
+        id_insumo: row.querySelector(".insumo-select").value,
+        cantidad: row.querySelector(".cantidad-insumo").value,
+        costo_unitario: row.querySelector(".costo-unit").value
+      });
     });
 
+    if (insumos.length === 0) {
+      alert("⚠ Debe agregar al menos un insumo.");
+      return;
+    }
+
+    fetch("{% url 'agregar_trabajo' 0 %}".replace("0", presupuestoId), {
+      method: "POST",
+      headers: {
+        "X-CSRFToken": document.querySelector("[name=csrfmiddlewaretoken]").value,
+        "X-Requested-With": "XMLHttpRequest",
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      },
+      body: new URLSearchParams({
+        nombre_trabajo: nombre,
+        cantidad_trabajo: cantidad,
+        costo_diseno_trabajo: costo,
+        margen_trabajo: margen,
+        descripcion_trabajo: desc,
+        insumos_json: JSON.stringify(insumos),
+        editar_trabajo_id: document.getElementById("editar_trabajo_id").value
+      })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) {
+        alert(data.error || "Ocurrió un error.");
+        return;
+      }
+      actualizarTablaTrabajo(data);
+      document.getElementById("editar_trabajo_id").value = "";
+    })
+    .catch(err => console.error("ERROR AJAX TRABAJO:", err));
+  });
 });
 </script>
 
 <script>
-document.addEventListener("input", function(e) {
+function actualizarBotonFinalizar(presupuestoId) {
+  const btn = document.getElementById("btnFinalizar");
+  if (!btn) return;
+  
+  btn.classList.remove("disabled");
+  btn.removeAttribute("disabled");
+  btn.setAttribute("formaction",
+    `/presupuesto/${presupuestoId}/confirmar/`
+  );
+}
 
-    const id = e.target.id;
-    if (id === "margen_trabajo") {
-        let v = e.target.value;
-        v = v.replace(/[^0-9]/g, "");
-        if (v === "") v = "0";
-        let num = parseInt(v);
-        if (num < 0) num = 0;
-        if (num > 100) num = 100;
-        e.target.value = num.toString();
-        return;
-    }
+// Cada vez que actualizamos la tabla luego de un AJAX:
+function actualizarTablaTrabajo(data) {
+  const cont = document.getElementById("contenedor-tabla-trabajos");
+  if (cont && data.tabla) cont.innerHTML = data.tabla;
 
-    const campos = [
-        "cantidad-insumo",
-        "cantidad_trabajo",
-        "costo_diseno_trabajo"
-    ];
+  if (data.total) {
+    document.getElementById("presupuesto-total").textContent =
+      parseFloat(data.total).toFixed(2);
+  }
 
-    const esCampoValido =
-        campos.some(c => e.target.classList.contains(c)) ||
-        campos.includes(id);
+  if (data.presupuesto_id) {
+    actualizarBotonFinalizar(data.presupuesto_id);  // 👈 CLAVE!
+  }
 
-    if (!esCampoValido) return;
-    let v = e.target.value;
-    v = v.replace(/-/g, "");
-    v = v.replace(/[^0-9.]/g, "");
-    if (v === "" || parseFloat(v) <= 0) v = 1;
-    e.target.value = v;
-});
-
-
-    const esCampoValido =
-        campos.some(c => e.target.classList.contains(c)) ||
-        campos.includes(e.target.id);
-
-    if (!esCampoValido) return;
-
-    let v = e.target.value;
-
-    v = v.replace(/-/g, "");
-    v = v.replace(/[^0-9.]/g, "");
-
-    if (v === "" || parseFloat(v) <= 0) v = 1;
-
-    e.target.value = v;
-
+  initAccionesTablaTrabajos();
+}
 </script>
+
 
 {% endblock %}

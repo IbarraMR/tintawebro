@@ -112,7 +112,7 @@ class EmpleadoForm(forms.ModelForm):
         }
 
     def clean_dni(self):
-        dni = self.cleaned_data.get('dni', '').strip()
+        dni = (self.cleaned_data.get('dni') or "").strip()
 
         if not dni.isdigit():
             raise ValidationError("El DNI solo puede contener números.")
@@ -122,7 +122,7 @@ class EmpleadoForm(forms.ModelForm):
         return dni
 
     def clean_telefono(self):
-        tel = self.cleaned_data.get('telefono', '').strip()
+        tel = (self.cleaned_data.get('telefono') or "").strip()
 
         if not tel.isdigit():
             raise ValidationError("El teléfono solo puede contener números.")
@@ -132,7 +132,7 @@ class EmpleadoForm(forms.ModelForm):
         return tel
 
     def clean_email(self):
-        email = self.cleaned_data.get('email', '').strip()
+        email = (self.cleaned_data.get('email') or "").strip()
 
         try:
             validate_email(email)

@@ -6,7 +6,6 @@
 {% block content %}
 {% include "core/partials/toasts.html" %}
 
-<!-- TÍTULO Y BOTÓN NUEVO -->
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="text-white">Pedidos</h2>
 
@@ -15,7 +14,6 @@
     </a>
 </div>
 
-<!-- BUSCADOR -->
 <form method="GET" class="mb-3">
     <div class="input-group">
         <input type="text" name="q" class="form-control" placeholder="Buscar por ID de pedido, nombre o apellido..."
@@ -25,7 +23,6 @@
     </div>
 </form>
 
-<!-- FILTROS -->
 <div class="d-flex gap-2 mb-3">
     <a href="{% url 'pedidos_list' %}"
        class="btn btn-outline-light btn-sm {% if not produccion %} active {% endif %}">
@@ -138,7 +135,6 @@
     </div>
 </div>
 
-<!-- JS PARA CAMBIO DE ESTADO -->
 <script>
 document.addEventListener("DOMContentLoaded", () => {
 

@@ -21,10 +21,6 @@
             ${{ presupuesto.total_presupuesto|floatformat:2 }}
         </p>
 
-        <p class="text-white">
-            <strong>Ganancia real:</strong>
-            ${{ presupuesto.ganancia_real|floatformat:2 }}
-        </p>
 
         <p class="text-secondary">
             <strong>Costo real del trabajo:</strong>
@@ -56,7 +52,7 @@
             </a>
         </div>
 
-        <a href="{% url 'presupuestos_list' %}" class="btn btn-secondary mt-3">⬅ Volver al presupuesto</a>
+        <a href="{% url 'presupuestos_list' %}" class="btn btn-secondary mt-3">⬅ Volver a presupuestos</a>
     </div>
 
     {% if trabajos %}
